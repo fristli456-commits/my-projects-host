@@ -64,21 +64,58 @@ document.getElementById('fileInput')?.addEventListener('change', function(e) {
 document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const formData = new FormData(e.target);
     const button = e.target.querySelector('button[type="submit"]');
     const originalText = button.innerHTML;
-    
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+    const file = document.getElementById('fileInput').files[0];
+    const previewFile = document.getElementById('previewInput').files[0];
+    const name = e.target.querySelector('input[name="name"]').value;
+    const description = e.target.querySelector('textarea[name="description"]').value;
+
+    if (!file) {
+        showNotification('❌ Выберите файл', 'error');
+        return;
+    }
+
     button.disabled = true;
 
     try {
-        const response = await fetch('/api/upload', {
+        // Шаг 1: Получаем presigned URL
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
+        const urlRes = await fetch('/api/presigned-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream' })
+        });
+        const { url, key } = await urlRes.json();
+
+        // Шаг 2: Загружаем файл напрямую в B2
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка файла...';
+        const uploadRes = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file
+        });
+
+        if (!uploadRes.ok) {
+            throw new Error('Ошибка загрузки в хранилище: ' + uploadRes.status);
+        }
+
+        // Шаг 3: Сохраняем проект
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('description', description);
+        formData.append('fileKey', key);
+        formData.append('originalName', file.name);
+        formData.append('fileSize', file.size);
+        if (previewFile) formData.append('preview', previewFile);
+
+        const saveRes = await fetch('/api/save-project', {
             method: 'POST',
             body: formData
         });
-        
-        const result = await response.json();
-        
+        const result = await saveRes.json();
+
         if (result.success) {
             e.target.reset();
             document.getElementById('fileInfo').classList.remove('show');
@@ -88,7 +125,7 @@ document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
             showNotification('❌ ' + result.error, 'error');
         }
     } catch (error) {
-        showNotification('❌ Ошибка загрузки', 'error');
+        showNotification('❌ ' + error.message, 'error');
     } finally {
         button.innerHTML = originalText;
         button.disabled = false;
