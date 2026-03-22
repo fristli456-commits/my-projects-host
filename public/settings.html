@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки аккаунта</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            color: #ff3333;
+            margin: 0;
+            text-shadow: 0 0 20px rgba(255, 51, 51, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 51, 51, 0.4);
+            color: #ff6666;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 51, 51, 0.15);
+            border-color: #ff3333;
+            color: #ff3333;
+        }
+
+        .back-link {
+            color: #ff6666;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+
+        .back-link:hover {
+            color: #ff3333;
+            transform: translateX(-5px);
+        }
+
+        /* Settings sections */
+        .settings-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .settings-section {
+            background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 51, 51, 0.1);
+        }
+
+        .settings-section h2 {
+            color: #ff3333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.3rem;
+        }
+
+        .current-value {
+            background: #1a1a1a;
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            color: #b0b0b0;
+            border-left: 4px solid #ff3333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #b0b0b0;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+            font-family: inherit;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #ff3333;
+            box-shadow: 0 0 0 3px rgba(255, 51, 51, 0.1);
+        }
+
+        button[type="submit"] {
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
+            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.3);
+        }
+
+        button[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(255, 51, 51, 0.5);
+        }
+
+        .password-requirements {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+
+        .password-requirements ul {
+            margin: 5px 0 0 20px;
+        }
+
+        .password-requirements li {
+            margin: 3px 0;
+        }
+
+        /* Messages */
+        .success-message {
+            background: #276749;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .success-message.show {
+            display: flex;
+        }
+
+        .error-message {
+            background: #c53030;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-message.show {
+            display: flex;
+        }
+
+        /* Info section */
+        .info-section {
+            background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 51, 51, 0.1);
+        }
+
+        .info-section h2 {
+            color: #ff3333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.3rem;
+        }
+
+        .info-section p {
+            color: #888;
+            line-height: 1.6;
+        }
+
+        .admin-badge {
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 768px) {
+            .header-top {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1><i class="fas fa-cog"></i> Настройки</h1>
+                <div id="authSection">
+                    <button onclick="logout()" class="btn-secondary">
+                        <i class="fas fa-sign-out-alt"></i> Выйти
+                    </button>
+                </div>
+            </div>
+            <a href="/" class="back-link">
+                <i class="fas fa-arrow-left"></i> На главную
+            </a>
+        </header>
+
+        <div class="settings-container">
+            <!-- Сообщения -->
+            <div id="successMsg" class="success-message">
+                <i class="fas fa-check-circle"></i>
+                <span id="successText"></span>
+            </div>
+            
+            <div id="errorMsg" class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="errorText"></span>
+            </div>
+
+            <!-- Смена ника -->
+            <div class="settings-section">
+                <h2><i class="fas fa-user-edit"></i> Смена никнейма</h2>
+                
+                <div class="current-value">
+                    <strong>Текущий ник:</strong> <span id="currentUsername">Загрузка...</span>
+                </div>
+                
+                <form id="usernameForm">
+                    <div class="form-group">
+                        <label>Новый никнейм</label>
+                        <input type="text" id="newUsername" placeholder="Введите новый ник" required minlength="3" maxlength="20">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Текущий пароль (для подтверждения)</label>
+                        <input type="password" id="usernamePassword" placeholder="Введите пароль" required>
+                    </div>
+                    
+                    <button type="submit">
+                        <i class="fas fa-save"></i> Сменить ник
+                    </button>
+                </form>
+            </div>
+
+            <!-- Смена пароля -->
+            <div class="settings-section">
+                <h2><i class="fas fa-key"></i> Смена пароля</h2>
+                
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label>Текущий пароль</label>
+                        <input type="password" id="currentPassword" placeholder="Введите текущий пароль" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Новый пароль</label>
+                        <input type="password" id="newPassword" placeholder="Введите новый пароль" required minlength="6">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Подтвердите новый пароль</label>
+                        <input type="password" id="confirmPassword" placeholder="Повторите новый пароль" required>
+                    </div>
+                    
+                    <div class="password-requirements">
+                        <strong>Требования к паролю:</strong>
+                        <ul>
+                            <li>Минимум 6 символов</li>
+                            <li>Рекомендуется использовать буквы и цифры</li>
+                        </ul>
+                    </div>
+                    
+                    <button type="submit">
+                        <i class="fas fa-lock"></i> Сменить пароль
+                    </button>
+                </form>
+            </div>
+
+            <!-- Информация об аккаунте -->
+            <div class="info-section">
+                <h2><i class="fas fa-info-circle"></i> Информация</h2>
+                <p>
+                    <strong>Тип аккаунта:</strong> <span id="accountType">Загрузка...</span><br>
+                    <strong>Дата регистрации:</strong> <span id="registerDate">Загрузка...</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Проверка авторизации
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/me');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/';
+                    return;
+                }
+                
+                document.getElementById('currentUsername').textContent = data.username;
+                document.getElementById('accountType').innerHTML = data.isAdmin ? 
+                    '<span style="color: #ff3333;">👑 Администратор</span>' : 
+                    '<span style="color: #888;">👤 Пользователь</span>';
+                
+                // Получаем инфо о пользователе
+                const userResponse = await fetch('/api/user/info');
+                const userData = await userResponse.json();
+                if (userData.success) {
+                    document.getElementById('registerDate').textContent = 
+                        new Date(userData.user.created_at).toLocaleDateString('ru-RU');
+                }
+                
+            } catch (error) {
+                window.location.href = '/';
+            }
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' }).then(() => {
+                window.location.href = '/';
+            });
+        }
+
+        function showSuccess(text) {
+            const msg = document.getElementById('successMsg');
+            document.getElementById('successText').textContent = text;
+            msg.classList.add('show');
+            setTimeout(() => msg.classList.remove('show'), 5000);
+        }
+
+        function showError(text) {
+            const msg = document.getElementById('errorMsg');
+            document.getElementById('errorText').textContent = text;
+            msg.classList.add('show');
+            setTimeout(() => msg.classList.remove('show'), 5000);
+        }
+
+        // Смена ника
+        document.getElementById('usernameForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                newUsername: document.getElementById('newUsername').value,
+                password: document.getElementById('usernamePassword').value
+            };
+
+            try {
+                const response = await fetch('/api/user/change-username', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess('✅ Никнейм успешно изменён!');
+                    document.getElementById('currentUsername').textContent = data.newUsername;
+                    document.getElementById('usernameForm').reset();
+                } else {
+                    showError('❌ ' + result.error);
+                }
+            } catch (error) {
+                showError('❌ Ошибка сервера');
+            }
+        });
+
+        // Смена пароля
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newPass = document.getElementById('newPassword').value;
+            const confirmPass = document.getElementById('confirmPassword').value;
+            
+            if (newPass !== confirmPass) {
+                showError('❌ Пароли не совпадают');
+                return;
+            }
+            
+            if (newPass.length < 6) {
+                showError('❌ Пароль должен быть минимум 6 символов');
+                return;
+            }
+
+            const data = {
+                currentPassword: document.getElementById('currentPassword').value,
+                newPassword: newPass
+            };
+
+            try {
+                const response = await fetch('/api/user/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess('✅ Пароль успешно изменён!');
+                    document.getElementById('passwordForm').reset();
+                } else {
+                    showError('❌ ' + result.error);
+                }
+            } catch (error) {
+                showError('❌ Ошибка сервера');
+            }
+        });
+
+        // Инициализация
+        checkAuth();
+    </script>
+</body>
+</html>

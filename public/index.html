@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мои Проекты</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            color: #ff3333;
+            margin: 0;
+            text-shadow: 0 0 20px rgba(255, 51, 51, 0.3);
+        }
+
+        header p {
+            color: #888;
+            font-size: 1.1rem;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 51, 51, 0.4);
+            color: #ff6666;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 51, 51, 0.15);
+            border-color: #ff3333;
+            color: #ff3333;
+        }
+
+        /* Auth overlay */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .auth-overlay.hidden {
+            display: none;
+        }
+
+        .auth-box {
+            background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+            padding: 40px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            text-align: center;
+            border: 1px solid rgba(255, 51, 51, 0.2);
+        }
+
+        .auth-box h1 {
+            color: #ff3333;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            text-shadow: 0 0 20px rgba(255, 51, 51, 0.3);
+        }
+
+        .auth-box p {
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        .auth-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #333;
+            background: #1a1a1a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #888;
+        }
+
+        .auth-tab.active {
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .auth-form {
+            display: none;
+        }
+
+        .auth-form.active {
+            display: block;
+        }
+
+        .auth-form input {
+            margin-bottom: 15px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            color: #e0e0e0;
+            width: 100%;
+            padding: 12px 15px;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+
+        .auth-form input:focus {
+            outline: none;
+            border-color: #ff3333;
+        }
+
+        .auth-form button {
+            width: 100%;
+            margin-top: 10px;
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .auth-form button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.4);
+        }
+
+        .guest-access {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+        }
+
+        .btn-guest {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            width: 100%;
+            transition: all 0.3s;
+        }
+
+        .btn-guest:hover {
+            background: #2d3748;
+            transform: scale(1.02);
+        }
+
+        /* Main content */
+        .main-content {
+            filter: blur(5px);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .main-content.authenticated {
+            filter: none;
+            pointer-events: auto;
+        }
+
+        .search-box {
+            max-width: 600px;
+            margin: 30px auto;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 15px 25px;
+            border: 2px solid #333;
+            border-radius: 50px;
+            font-size: 1rem;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            transition: all 0.3s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #ff3333;
+            box-shadow: 0 6px 30px rgba(255, 51, 51, 0.2);
+        }
+
+        /* Projects grid */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 25px;
+        }
+
+        .project-card {
+            background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255, 51, 51, 0.1);
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 50px rgba(255, 51, 51, 0.2);
+            border-color: rgba(255, 51, 51, 0.3);
+        }
+
+        .project-preview {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+            font-size: 3rem;
+        }
+
+        .project-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .project-content {
+            padding: 25px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .project-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            color: #e0e0e0;
+        }
+
+        .project-card p {
+            color: #888;
+            margin-bottom: 15px;
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        .file-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.3);
+        }
+
+        .download-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 30px rgba(255, 51, 51, 0.5);
+        }
+
+        .download-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #4a5568;
+        }
+
+        .loading {
+            text-align: center;
+            color: #ff6666;
+            font-size: 1.2rem;
+            padding: 60px;
+        }
+
+        .empty {
+            text-align: center;
+            color: #666;
+            padding: 60px;
+            font-size: 1.1rem;
+            grid-column: 1 / -1;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            animation: slideIn 0.3s;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        .notification.success { background: #276749; }
+        .notification.error { background: #c53030; }
+        .notification.info { background: #2b6cb0; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Admin badge */
+        .admin-badge {
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 0.7rem;
+            margin-left: 5px;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 768px) {
+            .header-top {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Окно авторизации -->
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-box">
+            <h1><i class="fas fa-rocket"></i> Мои Проекты</h1>
+            <p>Войдите чтобы просматривать и скачивать</p>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="showAuthTab('login')">Вход</button>
+                <button class="auth-tab" onclick="showAuthTab('register')">Регистрация</button>
+            </div>
+            
+            <form id="loginForm" class="auth-form active">
+                <input type="text" id="loginUsername" placeholder="Никнейм" required>
+                <input type="password" id="loginPassword" placeholder="Пароль" required>
+                <button type="submit">
+                    <i class="fas fa-sign-in-alt"></i> Войти
+                </button>
+            </form>
+            
+            <form id="registerForm" class="auth-form">
+                <input type="text" id="regUsername" placeholder="Никнейм" required minlength="3">
+                <input type="password" id="regPassword" placeholder="Пароль" required minlength="6">
+                <button type="submit">
+                    <i class="fas fa-user-plus"></i> Зарегистрироваться
+                </button>
+            </form>
+            
+            <div class="guest-access">
+                <button onclick="enterAsGuest()" class="btn-guest">
+                    <i class="fas fa-eye"></i> Просмотр без входа
+                </button>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 10px;">
+                    Только просмотр, без скачивания
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основной контент -->
+    <div id="mainContent" class="main-content">
+        <div class="container">
+            <header>
+                <div class="header-top">
+                    <div>
+                        <h1><i class="fas fa-rocket"></i> Мои Проекты</h1>
+                        <p style="color: #888;">Скачивайте файлы и приложения</p>
+                    </div>
+                    <div id="authSection">
+                        <!-- Здесь будет кнопка входа/выхода -->
+                    </div>
+                </div>
+            </header>
+
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 Поиск проектов...">
+            </div>
+
+            <div id="projectsList" class="projects-grid">
+                <div class="loading">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let allProjects = [];
+        let currentUser = null;
+        let isGuest = false;
+
+        // Проверка авторизации
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/me');
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    currentUser = data;
+                    showMainContent();
+                    updateAuthUI();
+                } else {
+                    document.getElementById('authOverlay').classList.remove('hidden');
+                    loadProjects();
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+
+        function showMainContent() {
+            document.getElementById('authOverlay').classList.add('hidden');
+            document.getElementById('mainContent').classList.add('authenticated');
+        }
+
+        function enterAsGuest() {
+            isGuest = true;
+            showMainContent();
+            document.getElementById('authSection').innerHTML = `
+                <button onclick="location.reload()" class="btn-secondary">
+                    <i class="fas fa-sign-in-alt"></i> Войти
+                </button>
+            `;
+            showNotification('👁️ Режим просмотра. Войдите чтобы скачивать.', 'info');
+        }
+
+        function updateAuthUI() {
+            const authSection = document.getElementById('authSection');
+            if (!currentUser) return;
+
+            let html = `
+                <a href="/settings.html" class="btn-secondary" style="margin-right: 10px;">
+                    <i class="fas fa-cog"></i> Настройки
+                </a>
+            `;
+
+            // Если админ - показываем кнопку панели управления
+            if (currentUser.isAdmin) {
+                html += `
+                    <a href="/admin.html" class="btn-secondary" style="margin-right: 10px; background: rgba(255, 51, 51, 0.2);">
+                        <i class="fas fa-lock"></i> Панель управления
+                    </a>
+                `;
+            }
+
+            html += `
+                <button onclick="logout()" class="btn-secondary">
+                    <i class="fas fa-sign-out-alt"></i> 
+                    ${currentUser.username}
+                    ${currentUser.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}
+                </button>
+            `;
+
+            authSection.innerHTML = html;
+        }
+
+        // Табы
+        function showAuthTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
+        }
+
+        // Вход
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                username: document.getElementById('loginUsername').value,
+                password: document.getElementById('loginPassword').value
+            };
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentUser = result.user;
+                    // Всегда перенаправляем на главную, а не на админку
+                    window.location.href = '/';
+                } else {
+                    alert('❌ ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Ошибка входа');
+            }
+        });
+
+        // Регистрация
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+    
+    console.log('=== РЕГИСТРАЦИЯ ===');
+    console.log('Username:', username);
+    console.log('Password length:', password.length);
+
+    if (username.length < 3) {
+        alert('❌ Никнейм должен быть минимум 3 символа');
+        return;
+    }
+    
+    if (password.length < 6) {
+        alert('❌ Пароль должен быть минимум 6 символов');
+        return;
+    }
+
+    try {
+        console.log('Отправка запроса...');
+        
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        console.log('Статус ответа:', response.status);
+        
+        // Читаем текст ответа
+        const text = await response.text();
+        console.log('Текст ответа:', text);
+        
+        // Парсим JSON
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch (e) {
+            console.error('Не JSON:', text);
+            alert('❌ Сервер вернул не JSON: ' + text.substring(0, 100));
+            return;
+        }
+        
+        console.log('Результат:', result);
+        
+        if (result.success) {
+            alert('✅ Регистрация успешна! Теперь войдите.');
+            // Переключаем на вкладку входа
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            document.querySelectorAll('.auth-tab')[0].classList.add('active');
+            document.getElementById('loginForm').classList.add('active');
+        } else {
+            alert('❌ Ошибка: ' + (result.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка запроса:', error);
+        alert('❌ Ошибка соединения: ' + error.message);
+    }
+});
+
+        // Выход
+        async function logout() {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                location.reload();
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+
+        // Загрузка проектов
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                allProjects = await response.json();
+                displayProjects(allProjects);
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+
+        function displayProjects(projects) {
+            const container = document.getElementById('projectsList');
+            
+            if (projects.length === 0) {
+                container.innerHTML = '<div class="empty">Пока нет проектов</div>';
+                return;
+            }
+
+            container.innerHTML = projects.map(project => {
+                const isFile = project.type === 'file';
+                const size = isFile ? formatFileSize(project.file_size) : 'Ссылка';
+                const downloads = project.downloads || 0;
+                
+                let previewHtml;
+                if (project.preview_path) {
+                    previewHtml = `<img src="${project.preview_path}" alt="${escapeHtml(project.name)}">`;
+                } else {
+                    const icon = isFile ? getFileIcon(project.original_name) : 'fa-link';
+                    previewHtml = `<i class="fas ${icon}"></i>`;
+                }
+
+                // Если гость - кнопка заблокирована
+                const downloadBtn = isGuest ? 
+                    `<button class="download-btn" disabled>
+                        <i class="fas fa-lock"></i> Войдите для скачивания
+                    </button>` :
+                    `<a href="/api/download/${project.id}" class="download-btn" ${!isFile ? 'target="_blank"' : ''}>
+                        <i class="fas ${isFile ? 'fa-download' : 'fa-external-link-alt'}"></i>
+                        ${isFile ? 'Скачать' : 'Перейти'}
+                    </a>`;
+
+                return `
+                    <div class="project-card">
+                        <div class="project-preview">
+                            ${previewHtml}
+                        </div>
+                        <div class="project-content">
+                            <h3>${escapeHtml(project.name)}</h3>
+                            <p>${escapeHtml(project.description || 'Без описания')}</p>
+                            <div class="file-meta">
+                                <span>${size}</span>
+                                <span><i class="fas fa-download"></i> ${downloads}</span>
+                            </div>
+                            ${downloadBtn}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function getFileIcon(filename) {
+            if (!filename) return 'fa-file';
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'exe': 'fa-windows',
+                'apk': 'fa-android',
+                'ipa': 'fa-apple',
+                'zip': 'fa-file-archive',
+                'rar': 'fa-file-archive',
+                'pdf': 'fa-file-pdf',
+                'doc': 'fa-file-word',
+                'docx': 'fa-file-word',
+                'jpg': 'fa-file-image',
+                'jpeg': 'fa-file-image',
+                'png': 'fa-file-image',
+                'mp4': 'fa-file-video',
+                'mp3': 'fa-file-audio'
+            };
+            return icons[ext] || 'fa-file';
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Поиск
+        document.getElementById('searchInput')?.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = allProjects.filter(p => 
+                p.name.toLowerCase().includes(query) || 
+                (p.description && p.description.toLowerCase().includes(query))
+            );
+            displayProjects(filtered);
+        });
+
+        function showNotification(text, type) {
+            const div = document.createElement('div');
+            div.className = `notification ${type}`;
+            div.textContent = text;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        // Real-time
+        socket.on('new_project', () => loadProjects());
+        socket.on('delete_project', () => loadProjects());
+        socket.on('update_project', () => loadProjects());
+
+        // Инициализация
+        checkAuth();
+    </script>
+</body>
+</html>
