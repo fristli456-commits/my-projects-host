@@ -203,7 +203,13 @@ app.get('/api/projects', async (req, res) => {
 app.post('/api/upload', requireAdmin, upload.fields([
   { name: 'file', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
-]), async (req, res) => {
+], (multerErr, req, res, next) => {
+  if (multerErr) {
+    console.error('Ошибка multer:', multerErr);
+    return res.status(500).json({ error: multerErr.message });
+  }
+  next();
+}), async (req, res) => {
   const { name, description } = req.body;
   const file = req.files['file']?.[0];
   const preview = req.files['preview']?.[0];
@@ -232,6 +238,7 @@ app.post('/api/upload', requireAdmin, upload.fields([
     io.emit('new_project', newProject);
     res.json({ success: true, project: newProject });
   } catch (err) {
+    console.error('Ошибка upload:', JSON.stringify(err, null, 2));
     res.status(500).json({ error: err.message });
   }
 });
