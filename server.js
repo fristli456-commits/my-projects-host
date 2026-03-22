@@ -111,6 +111,8 @@ async function initDB() {
     )
   `);
 
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS file_key TEXT`);
+
   await createDefaultAdmin();
   console.log('✅ База данных готова');
 }
