@@ -88,17 +88,27 @@ document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
         });
         const { url, key } = await urlRes.json();
 
-        // Шаг 2: Загружаем файл напрямую в B2
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка файла...';
-        const uploadRes = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type || 'application/octet-stream' },
-            body: file
+        // Шаг 2: Загружаем файл напрямую в B2 с прогрессом
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка: 0%';
+        
+        await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', url);
+            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+            
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    const loaded = (e.loaded / 1024 / 1024).toFixed(1);
+                    const total = (e.total / 1024 / 1024).toFixed(1);
+                    button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}% (${loaded} / ${total} МБ)`;
+                }
+            };
+            
+            xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка загрузки: ' + xhr.status));
+            xhr.onerror = () => reject(new Error('Ошибка сети'));
+            xhr.send(file);
         });
-
-        if (!uploadRes.ok) {
-            throw new Error('Ошибка загрузки в хранилище: ' + uploadRes.status);
-        }
 
         // Шаг 3: Сохраняем проект
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
