@@ -160,6 +160,31 @@
 
         .file-info.show { display: block; }
 
+        .progress-bar {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .progress-bar.show { display: block; }
+
+        .progress-bar-fill {
+            width: 100%;
+            height: 25px;
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            border-radius: 8px;
+            overflow: hidden;
+            text-align: center;
+            line-height: 25px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.85rem;
+            width: 0%;
+            transition: width 0.2s;
+        }
+
         .preview-thumb {
             margin-top: 10px;
             width: 100px;
@@ -331,12 +356,12 @@
             <form id="uploadForm" enctype="multipart/form-data">
                 <div class="form-group">
                     <label>Название проекта</label>
-                    <input type="text" name="name" placeholder="Например: Мой Супер-App" required>
+                    <input type="text" id="fileName" placeholder="Например: Мой Супер-App">
                 </div>
                 
                 <div class="form-group">
                     <label>Описание</label>
-                    <textarea name="description" placeholder="Описание функций..."></textarea>
+                    <textarea id="fileDescription" placeholder="Описание функций..."></textarea>
                 </div>
 
                 <div class="form-row">
@@ -351,6 +376,10 @@
                         <input type="file" name="preview" id="previewInput" accept="image/*">
                         <div class="preview-thumb" id="previewThumb"></div>
                     </div>
+                </div>
+
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-bar-fill" id="progressFill">0%</div>
                 </div>
 
                 <button type="submit" id="submitBtn">
@@ -509,28 +538,89 @@
             }
         });
 
-        // ЗАГРУЗКА ФАЙЛА (простая, через сервер)
+        // ЗАГРУЗКА ФАЙЛА (с presigned URL для B2)
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const submitBtn = document.getElementById('submitBtn');
-            const formData = new FormData(e.target);
-            
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const file = document.getElementById('fileInput').files[0];
+            const previewFile = document.getElementById('previewInput').files[0];
+            const name = document.getElementById('fileName')?.value || '';
+            const description = document.getElementById('fileDescription')?.value || '';
+
+            if (!file) {
+                showNotification('❌ Выберите файл', 'error');
+                return;
+            }
+
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+            progressBar.classList.add('show');
 
             try {
-                const response = await fetch('/api/upload', {
+                // Шаг 1: Получаем presigned URL
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
+                const urlRes = await fetch('/api/presigned-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filename: file.name, 
+                        contentType: file.type || 'application/octet-stream' 
+                    })
+                });
+                
+                if (!urlRes.ok) throw new Error('Ошибка получения URL');
+                const { url, key } = await urlRes.json();
+
+                // Шаг 2: Загружаем файл в B2 с прогрессом
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', url, true);
+                    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                    
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            progressFill.style.width = percent + '%';
+                            progressFill.textContent = percent + '%';
+                            submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}%`;
+                        }
+                    };
+                    
+                    xhr.onload = () => {
+                        if (xhr.status === 200) resolve();
+                        else reject(new Error('Ошибка загрузки: ' + xhr.status));
+                    };
+                    
+                    xhr.onerror = () => reject(new Error('Ошибка сети'));
+                    xhr.send(file);
+                });
+
+                // Шаг 3: Сохраняем проект
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+                
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('description', description);
+                formData.append('fileKey', key);
+                formData.append('originalName', file.name);
+                formData.append('fileSize', file.size);
+                if (previewFile) formData.append('preview', previewFile);
+
+                const saveRes = await fetch('/api/save-project', {
                     method: 'POST',
                     body: formData
                 });
                 
-                const result = await response.json();
+                const result = await saveRes.json();
 
                 if (result.success) {
-                    e.target.reset();
+                    document.getElementById('uploadForm').reset();
                     document.getElementById('fileInfo').classList.remove('show');
                     document.getElementById('previewThumb').classList.remove('show');
+                    progressBar.classList.remove('show');
+                    progressFill.style.width = '0%';
                     showNotification('✅ Файл загружен успешно!', 'success');
                 } else {
                     throw new Error(result.error || 'Ошибка сохранения');
