@@ -128,22 +128,24 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Загрузить файл в B2 (потоком, экономит память)
-async function uploadToB2Stream(buffer, originalName, mimetype) {
+// Загрузить файл в B2 через stream
+async function uploadToB2Stream(fileBuffer, originalName, mimetype) {
   const key = `uploads/${uuidv4()}-${originalName}`;
   try {
-    console.log('🔄 Загружаем в B2:', key);
+    console.log('🔄 Отправляем в B2:', key, 'Размер:', (fileBuffer.length / 1024 / 1024).toFixed(2) + ' MB');
+    
     const result = await s3.send(new PutObjectCommand({
       Bucket: B2_BUCKET,
       Key: key,
-      Body: buffer,
+      Body: fileBuffer,
       ContentType: mimetype,
     }));
-    console.log('✅ B2 успешно:', key);
+    
+    console.log('✅ Успешно загружено в B2:', key);
     return key;
   } catch (err) {
-    console.error('❌ Ошибка B2:', err);
-    throw new Error('Ошибка загрузки в хранилище: ' + err.message);
+    console.error('❌ B2 ошибка:', err.message);
+    throw new Error('Ошибка загрузки: ' + err.message);
   }
 }
 
@@ -232,38 +234,50 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
   let fileKey = null;
 
   try {
-    console.log('📤 Загрузка файла:', file.originalname, 'Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    console.log('\n📤 === НАЧАЛО ЗАГРУЗКИ ===');
+    console.log('Файл:', file.originalname);
+    console.log('Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    console.log('Имя проекта:', name);
     
-    // Загружаем основной файл в B2
+    // Шаг 1: Загружаем основной файл в B2
+    console.log('Шаг 1: Загрузка в B2...');
     fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
+    console.log('Шаг 1: ✅ OK');
 
-    // Загружаем превью в Cloudinary если есть
+    // Шаг 2: Загружаем превью в Cloudinary если есть
     let previewPath = null;
     let previewPublicId = null;
     if (previewFile) {
+      console.log('Шаг 2: Загрузка превью в Cloudinary...');
       try {
-        console.log('🖼️  Загружаем превью в Cloudinary...');
         const uploaded = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_stream(
+          const stream = cloudinary.uploader.upload_stream(
             { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
             (err, result) => err ? reject(err) : resolve(result)
-          ).end(previewFile.buffer);
+          );
+          stream.on('error', reject);
+          stream.end(previewFile.buffer);
         });
         previewPath = uploaded.secure_url;
         previewPublicId = uploaded.public_id;
-        console.log('✅ Превью загружено:', previewPublicId);
+        console.log('Шаг 2: ✅ OK -', previewPublicId);
       } catch (err) {
-        console.warn('⚠️  Ошибка Cloudinary:', err.message);
+        console.warn('Шаг 2: ⚠️ Пропущен -', err.message);
+        // Продолжаем без превью
       }
+    } else {
+      console.log('Шаг 2: ⏭️ Пропущен (нет превью)');
     }
 
+    // Шаг 3: Сохраняем в БД
+    console.log('Шаг 3: Сохранение в БД...');
     const id = uuidv4();
-    console.log('💾 Сохраняем в БД...');
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
       [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
     );
+    console.log('Шаг 3: ✅ OK - ID:', id);
 
     const newProject = {
       id, name: name || file.originalname, description,
@@ -273,13 +287,16 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     };
 
     io.emit('new_project', newProject);
-    console.log('✅ Проект успешно создан:', id);
+    console.log('📡 Событие отправлено в браузеры');
+    console.log('✅ === ЗАГРУЗКА ЗАВЕРШЕНА УСПЕШНО ===\n');
     
-    // Гарантируем отправку ответа
     res.status(200).json({ success: true, project: newProject });
   } catch (err) {
-    console.error('❌ Ошибка upload:', err);
-    // Даже при ошибке отправляем ответ чтобы не зависла клиент
+    console.error('❌ === ОШИБКА ЗАГРУЗКИ ===');
+    console.error('Сообщение:', err.message);
+    console.error('Стек:', err.stack);
+    console.error('===========================\n');
+    
     if (!res.headersSent) {
       res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
     }
