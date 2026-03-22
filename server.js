@@ -200,16 +200,19 @@ app.get('/api/projects', async (req, res) => {
 });
 
 // Загрузить файл (только админ)
-app.post('/api/upload', requireAdmin, upload.fields([
-  { name: 'file', maxCount: 1 },
-  { name: 'preview', maxCount: 1 }
-], (multerErr, req, res, next) => {
-  if (multerErr) {
-    console.error('Ошибка multer:', multerErr);
-    return res.status(500).json({ error: multerErr.message });
-  }
-  next();
-}), async (req, res) => {
+app.post('/api/upload', requireAdmin, (req, res, next) => {
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'preview', maxCount: 1 }
+  ])(req, res, (err) => {
+    if (err) {
+      console.error('Ошибка multer:', err.message, err);
+      return res.status(500).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  
   const { name, description } = req.body;
   const file = req.files['file']?.[0];
   const preview = req.files['preview']?.[0];
