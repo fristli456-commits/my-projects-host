@@ -131,17 +131,18 @@ function requireAdmin(req, res, next) {
 async function uploadToB2Stream(buffer, originalName, mimetype) {
   const key = `uploads/${uuidv4()}-${originalName}`;
   try {
-    await s3.send(new PutObjectCommand({
+    console.log('🔄 Загружаем в B2:', key);
+    const result = await s3.send(new PutObjectCommand({
       Bucket: B2_BUCKET,
       Key: key,
       Body: buffer,
       ContentType: mimetype,
     }));
-    console.log('✅ Файл загружен в B2:', key);
+    console.log('✅ B2 успешно:', key);
     return key;
   } catch (err) {
-    console.error('❌ Ошибка B2:', err.message);
-    throw err;
+    console.error('❌ Ошибка B2:', err);
+    throw new Error('Ошибка загрузки в хранилище: ' + err.message);
   }
 }
 
@@ -228,27 +229,34 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
   }
 
   try {
-    console.log('Загрузка файла:', file.originalname, 'Размер:', file.size);
+    console.log('📤 Загрузка файла:', file.originalname, 'Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
     
     // Загружаем основной файл в B2
-    const fileKey = await uploadToB2(file.buffer, file.originalname, file.mimetype);
-    console.log('Файл загружен в B2:', fileKey);
+    const fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
 
     // Загружаем превью в Cloudinary если есть
     let previewPath = null;
     let previewPublicId = null;
     if (previewFile) {
-      const uploaded = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
-          (err, result) => err ? reject(err) : resolve(result)
-        ).end(previewFile.buffer);
-      });
-      previewPath = uploaded.secure_url;
-      previewPublicId = uploaded.public_id;
+      try {
+        console.log('🖼️  Загружаем превью в Cloudinary...');
+        const uploaded = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+            (err, result) => err ? reject(err) : resolve(result)
+          ).end(previewFile.buffer);
+        });
+        previewPath = uploaded.secure_url;
+        previewPublicId = uploaded.public_id;
+        console.log('✅ Превью загружено:', previewPublicId);
+      } catch (err) {
+        console.warn('⚠️  Ошибка Cloudinary:', err.message);
+        // Не ломаем весь процесс если превью не загрузилось
+      }
     }
 
     const id = uuidv4();
+    console.log('💾 Сохраняем в БД...');
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
@@ -263,10 +271,11 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     };
 
     io.emit('new_project', newProject);
+    console.log('✅ Проект успешно создан:', id);
     res.json({ success: true, project: newProject });
   } catch (err) {
-    console.error('Ошибка upload:', err);
-    res.status(500).json({ error: err.message });
+    console.error('❌ Ошибка upload:', err);
+    res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
   }
 });
 
