@@ -90,10 +90,12 @@ async function initDB() {
       filename TEXT,
       original_name TEXT,
       file_key TEXT,
+      mobile_file_key TEXT,
       link_url TEXT,
       preview_path TEXT,
       preview_public_id TEXT,
       file_size INTEGER,
+      mobile_file_size INTEGER,
       downloads INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -129,11 +131,13 @@ function requireAdmin(req, res, next) {
 }
 
 // Асинхронная загрузка в B2 (в фоне, не ожидаем)
-async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId) {
+async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId, version = 'pc') {
   setImmediate(async () => {
     try {
-      console.log('🔄 [ФОНЕ] Загружаем в B2:', projectId);
-      const key = `uploads/${uuidv4()}-${originalName}`;
+      const versionPrefix = version === 'mobile' ? 'mobile-' : 'pc-';
+      const key = `uploads/${uuidv4()}-${versionPrefix}${originalName}`;
+      
+      console.log(`🔄 [ФОНЕ] Загружаем ${version} версию в B2:`, projectId);
       
       await s3.send(new PutObjectCommand({
         Bucket: B2_BUCKET,
@@ -142,11 +146,16 @@ async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId) {
         ContentType: mimetype,
       }));
       
-      console.log('✅ [ФОНЕ] Загружено в B2:', key);
+      console.log(`✅ [ФОНЕ] Загружено (${version}) в B2:`, key);
       
-      // Обновляем file_key в БД
-      await pool.query('UPDATE projects SET file_key = $1 WHERE id = $2', [key, projectId]);
-      console.log('✅ [ФОНЕ] БД обновлена');
+      // Обновляем file_key или mobile_file_key в БД
+      if (version === 'mobile') {
+        await pool.query('UPDATE projects SET mobile_file_key = $1 WHERE id = $2', [key, projectId]);
+        console.log(`✅ [ФОНЕ] БД обновлена (мобильная версия)`);
+      } else {
+        await pool.query('UPDATE projects SET file_key = $1 WHERE id = $2', [key, projectId]);
+        console.log(`✅ [ФОНЕ] БД обновлена (ПК версия)`);
+      }
     } catch (err) {
       console.error('❌ [ФОНЕ] Ошибка B2:', err.message);
     }
@@ -225,25 +234,35 @@ app.post('/api/logout', (req, res) => {
 // ЗАГРУЗКА ФАЙЛА (через сервер)
 app.post('/api/upload', requireAdmin, diskUpload.fields([
   { name: 'file', maxCount: 1 },
+  { name: 'mobileFile', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
 ]), async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, hasMobileVersion } = req.body;
   const file = req.files['file']?.[0];
+  const mobileFile = req.files['mobileFile']?.[0];
   const previewFile = req.files['preview']?.[0];
 
   if (!file) {
-    return res.status(400).json({ error: 'Файл не загружен' });
+    return res.status(400).json({ error: 'Файл (ПК версия) не загружен' });
+  }
+
+  if (hasMobileVersion === '1' && !mobileFile) {
+    return res.status(400).json({ error: 'Мобильная версия не загружена' });
   }
 
   try {
     console.log('\n📤 === НАЧАЛО ЗАГРУЗКИ ===');
-    console.log('Файл:', file.originalname);
-    console.log('Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    console.log('ПК Файл:', file.originalname);
+    console.log('ПК Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    if (mobileFile) {
+      console.log('📱 Мобильный файл:', mobileFile.originalname);
+      console.log('📱 Мобильный размер:', (mobileFile.size / 1024 / 1024).toFixed(2) + ' MB');
+    }
     console.log('Имя проекта:', name);
     
     // Создаем ID проекта сразу
     const id = uuidv4();
-    console.log('Шаг 1: Создание записи в БД с пустым file_key...');
+    console.log('Шаг 1: Создание записи в БД...');
     
     // Шаг 1: Загружаем превью в Cloudinary если есть (быстро)
     let previewPath = null;
@@ -282,12 +301,12 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
       console.log('Шаг 2: ⏭️ Пропущен (нет превью)');
     }
 
-    // Шаг 3: Сохраняем в БД СРАЗУ (БЕЗ file_key, будет добавлен позже)
+    // Шаг 3: Сохраняем в БД СРАЗУ (БЕЗ file_key, будут добавлены позже)
     console.log('Шаг 3: Сохранение в БД...');
     await pool.query(
-      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
-       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
-      [id, name || file.originalname, description, file.originalname, file.originalname, '', previewPath, previewPublicId, file.size]
+      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, mobile_file_key, preview_path, preview_public_id, file_size, mobile_file_size)
+       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, name || file.originalname, description, file.originalname, file.originalname, '', '', previewPath, previewPublicId, file.size, mobileFile ? mobileFile.size : null]
     );
     console.log('Шаг 3: ✅ OK - Проект ID:', id);
 
@@ -301,6 +320,7 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
       original_name: file.originalname,
       preview_path: previewPath, 
       file_size: file.size,
+      mobile_file_size: mobileFile ? mobileFile.size : null,
       downloads: 0, 
       created_at: new Date().toISOString()
     };
@@ -314,7 +334,10 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
 
     // Шаг 6: АСИНХРОННО загружаем в B2 (В ФОНЕ)
     console.log('Шаг 6: Запуск асинхронной загрузки в B2...');
-    uploadToB2Async(file.buffer, file.originalname, file.mimetype, id);
+    uploadToB2Async(file.buffer, file.originalname, file.mimetype, id, 'pc');
+    if (mobileFile) {
+      uploadToB2Async(mobileFile.buffer, mobileFile.originalname, mobileFile.mimetype, id, 'mobile');
+    }
     console.log('Шаг 6: ✅ Загрузка в фоне запущена');
     console.log('✅ === ЗАГРУЗКА ЗАВЕРШЕНА (ответ отправлен) ===\n');
     
@@ -336,67 +359,6 @@ app.get('/api/projects', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// ЗАГРУЗКА ФАЙЛА (через сервер)
-app.post('/api/upload', requireAdmin, diskUpload.fields([
-  { name: 'file', maxCount: 1 },
-  { name: 'preview', maxCount: 1 }
-]), async (req, res) => {
-  const { name, description } = req.body;
-  const file = req.files['file']?.[0];
-  const previewFile = req.files['preview']?.[0];
-
-  if (!file) {
-    return res.status(400).json({ error: 'Файл не загружен' });
-  }
-
-  try {
-    console.log('📤 Загрузка файла:', file.originalname, 'Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
-    
-    // Загружаем основной файл в B2
-    const fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
-
-    // Загружаем превью в Cloudinary если есть
-    let previewPath = null;
-    let previewPublicId = null;
-    if (previewFile) {
-      try {
-        const uploaded = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_stream(
-            { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
-            (err, result) => err ? reject(err) : resolve(result)
-          ).end(previewFile.buffer);
-        });
-        previewPath = uploaded.secure_url;
-        previewPublicId = uploaded.public_id;
-        console.log('🖼️  Превью загружено:', previewPublicId);
-      } catch (err) {
-        console.warn('⚠️  Ошибка загрузки превью:', err.message);
-      }
-    }
-
-    const id = uuidv4();
-    await pool.query(
-      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
-       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
-      [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
-    );
-
-    const newProject = {
-      id, name: name || file.originalname, description,
-      type: 'file', original_name: file.originalname,
-      preview_path: previewPath, file_size: file.size,
-      downloads: 0, created_at: new Date().toISOString()
-    };
-
-    io.emit('new_project', newProject);
-    console.log('✅ Проект создан:', id);
-    res.json({ success: true, project: newProject });
-  } catch (err) {
-    console.error('❌ Ошибка upload:', err);
-    res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
   }
 });
 
@@ -504,6 +466,7 @@ app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
 // Скачать файл
 app.get('/api/download/:id', async (req, res) => {
   const { id } = req.params;
+  const { version } = req.query; // 'pc' или 'mobile'
 
   try {
     const result = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
@@ -514,7 +477,15 @@ app.get('/api/download/:id', async (req, res) => {
 
     if (row.type === 'link') return res.redirect(row.link_url);
 
-    const url = await getDownloadUrl(row.file_key);
+    // Выбираем правильный файл по версии
+    let fileKey = row.file_key;
+    if (version === 'mobile' && row.mobile_file_key) {
+      fileKey = row.mobile_file_key;
+    }
+
+    if (!fileKey) return res.status(404).json({ error: 'Файл не найден' });
+
+    const url = await getDownloadUrl(fileKey);
     res.redirect(url);
   } catch (err) {
     res.status(500).json({ error: err.message });

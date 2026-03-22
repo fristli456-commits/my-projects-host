@@ -152,8 +152,23 @@ function displayProjects(projects) {
 
     container.innerHTML = projects.map(project => {
         const isFile = project.type === 'file';
-        const size = isFile ? formatFileSize(project.file_size) : 'Ссылка';
+        const hasMobileVersion = project.mobile_file_size && project.mobile_file_size > 0;
         const downloads = project.downloads || 0;
+        
+        // Размеры
+        let sizeHtml = 'Ссылка';
+        if (isFile) {
+            if (hasMobileVersion) {
+                const pcSize = formatFileSize(project.file_size);
+                const mobileSize = formatFileSize(project.mobile_file_size);
+                sizeHtml = `<div style="font-size: 0.85em; line-height: 1.3;">
+                    <span>💻 ${pcSize}</span>
+                    <span style="display: block;">📱 ${mobileSize}</span>
+                </div>`;
+            } else {
+                sizeHtml = formatFileSize(project.file_size);
+            }
+        }
         
         // Превью
         let previewHtml;
@@ -162,6 +177,31 @@ function displayProjects(projects) {
         } else {
             const icon = isFile ? getFileIcon(project.original_name) : 'fa-link';
             previewHtml = `<i class="fas ${icon}"></i>`;
+        }
+
+        // Кнопки скачивания
+        let downloadHtml;
+        if (isFile) {
+            if (hasMobileVersion) {
+                downloadHtml = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <a href="/api/download/${project.id}?version=pc" class="download-btn" style="flex: 1;">
+                            <i class="fas fa-download"></i> 💻
+                        </a>
+                        <a href="/api/download/${project.id}?version=mobile" class="download-btn" style="flex: 1;">
+                            <i class="fas fa-download"></i> 📱
+                        </a>
+                    </div>
+                `;
+            } else {
+                downloadHtml = `<a href="/api/download/${project.id}" class="download-btn">
+                    <i class="fas fa-download"></i> Скачать
+                </a>`;
+            }
+        } else {
+            downloadHtml = `<a href="/api/download/${project.id}" class="download-btn" target="_blank">
+                <i class="fas fa-external-link-alt"></i> Перейти
+            </a>`;
         }
 
         return `
@@ -173,18 +213,16 @@ function displayProjects(projects) {
                     <h3>${escapeHtml(project.name)}</h3>
                     <p>${escapeHtml(project.description || 'Без описания')}</p>
                     <div class="file-meta">
-                        <span>${size}</span>
+                        <span>${sizeHtml}</span>
                         <span><i class="fas fa-download"></i> ${downloads}</span>
                     </div>
-                    <a href="/api/download/${project.id}" class="download-btn" ${!isFile ? 'target="_blank"' : ''}>
-                        <i class="fas ${isFile ? 'fa-download' : 'fa-external-link-alt'}"></i>
-                        ${isFile ? 'Скачать' : 'Перейти'}
-                    </a>
+                    ${downloadHtml}
                 </div>
             </div>
         `;
     }).join('');
 }
+
 
 function getFileIcon(filename) {
     if (!filename) return 'fa-file';

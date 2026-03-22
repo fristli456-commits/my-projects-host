@@ -366,7 +366,7 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Файл приложения *</label>
+                        <label>Файл приложения (ПК версия) *</label>
                         <input type="file" name="file" id="fileInput" required>
                         <div class="file-info" id="fileInfo"></div>
                     </div>
@@ -375,6 +375,21 @@
                         <label>Превью (скриншот/иконка)</label>
                         <input type="file" name="preview" id="previewInput" accept="image/*">
                         <div class="preview-thumb" id="previewThumb"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer; color: #e0e0e0;">
+                        <input type="checkbox" id="mobileVersionToggle" style="width: 20px; height: 20px; cursor: pointer; margin-right: 10px;">
+                        📱 Добавить версию для телефона
+                    </label>
+                </div>
+
+                <div id="mobileVersionSection" style="display: none;">
+                    <div class="form-group">
+                        <label>Файл приложения (Мобильная версия) *</label>
+                        <input type="file" name="mobileFile" id="mobileFileInput">
+                        <div class="file-info" id="mobileFileInfo"></div>
                     </div>
                 </div>
 
@@ -511,6 +526,22 @@
             });
         }
 
+        // Мобильная версия - переключатель
+        document.getElementById('mobileVersionToggle')?.addEventListener('change', function(e) {
+            const mobileSection = document.getElementById('mobileVersionSection');
+            const mobileInput = document.getElementById('mobileFileInput');
+            
+            if (e.target.checked) {
+                mobileSection.style.display = 'block';
+                mobileInput.required = true;
+            } else {
+                mobileSection.style.display = 'none';
+                mobileInput.required = false;
+                mobileInput.value = '';
+                document.getElementById('mobileFileInfo').classList.remove('show');
+            }
+        });
+
         // Превью
         document.getElementById('previewInput')?.addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -526,15 +557,29 @@
             }
         });
 
-        // Инфо о файле
+        // Инфо о ПК файле
         document.getElementById('fileInput')?.addEventListener('change', function(e) {
             const file = e.target.files[0];
             const info = document.getElementById('fileInfo');
             
             if (file) {
                 const size = formatFileSize(file.size);
-                info.innerHTML = `<strong>📁 ${file.name}</strong><br>📊 ${size}`;
+                info.innerHTML = `<strong>💻 ${file.name}</strong><br>📊 ${size}`;
                 info.classList.add('show');
+            }
+        });
+
+        // Инфо о мобильном файле
+        document.getElementById('mobileFileInput')?.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const info = document.getElementById('mobileFileInfo');
+            
+            if (file) {
+                const size = formatFileSize(file.size);
+                info.innerHTML = `<strong>📱 ${file.name}</strong><br>📊 ${size}`;
+                info.classList.add('show');
+            } else {
+                info.classList.remove('show');
             }
         });
 
@@ -547,11 +592,18 @@
             const progressFill = document.getElementById('progressFill');
             const file = document.getElementById('fileInput').files[0];
             const previewFile = document.getElementById('previewInput').files[0];
+            const mobileToggle = document.getElementById('mobileVersionToggle').checked;
+            const mobileFile = document.getElementById('mobileFileInput').files[0];
             const name = document.getElementById('fileName')?.value || '';
             const description = document.getElementById('fileDescription')?.value || '';
 
             if (!file) {
-                showNotification('❌ Выберите файл', 'error');
+                showNotification('❌ Выберите файл (ПК версия)', 'error');
+                return;
+            }
+
+            if (mobileToggle && !mobileFile) {
+                showNotification('❌ Выберите файл мобильной версии', 'error');
                 return;
             }
 
@@ -563,6 +615,8 @@
                 formData.append('name', name);
                 formData.append('description', description);
                 formData.append('file', file);
+                formData.append('hasMobileVersion', mobileToggle ? '1' : '0');
+                if (mobileFile) formData.append('mobileFile', mobileFile);
                 if (previewFile) formData.append('preview', previewFile);
 
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
@@ -585,11 +639,14 @@
                             if (result.success) {
                                 document.getElementById('uploadForm').reset();
                                 document.getElementById('fileInfo').classList.remove('show');
+                                document.getElementById('mobileFileInfo').classList.remove('show');
                                 document.getElementById('previewThumb').classList.remove('show');
+                                document.getElementById('mobileVersionSection').style.display = 'none';
+                                document.getElementById('mobileVersionToggle').checked = false;
                                 progressBar.classList.remove('show');
                                 progressFill.style.width = '0%';
                                 progressFill.textContent = '0%';
-                                showNotification('✅ Файл загружен успешно!', 'success');
+                                showNotification('✅ Файл(ы) загружены успешно!', 'success');
                                 setTimeout(() => loadAdminProjects(), 1000);
                             } else {
                                 throw new Error(result.error || 'Ошибка сохранения');
