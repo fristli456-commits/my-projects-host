@@ -242,28 +242,41 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     // Шаг 1: Загружаем основной файл в B2
     console.log('Шаг 1: Загрузка в B2...');
     fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
-    console.log('Шаг 1: ✅ OK');
+    console.log('Шаг 1: ✅ OK - Ключ:', fileKey);
 
-    // Шаг 2: Загружаем превью в Cloudinary если есть
+    // Шаг 2: Загружаем превью в Cloudinary если есть (опционально)
     let previewPath = null;
     let previewPublicId = null;
+    
     if (previewFile) {
-      console.log('Шаг 2: Загрузка превью в Cloudinary...');
+      console.log('Шаг 2: Загрузка превью...');
       try {
         const uploaded = await new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => reject(new Error('Таймаут Cloudinary')), 30000); // 30 сек таймаут
+          
           const stream = cloudinary.uploader.upload_stream(
             { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
-            (err, result) => err ? reject(err) : resolve(result)
+            (err, result) => {
+              clearTimeout(timeoutId);
+              if (err) reject(err);
+              else resolve(result);
+            }
           );
-          stream.on('error', reject);
+          
+          stream.on('error', (err) => {
+            clearTimeout(timeoutId);
+            reject(err);
+          });
+          
           stream.end(previewFile.buffer);
         });
+        
         previewPath = uploaded.secure_url;
         previewPublicId = uploaded.public_id;
-        console.log('Шаг 2: ✅ OK -', previewPublicId);
+        console.log('Шаг 2: ✅ OK - ID:', previewPublicId);
       } catch (err) {
         console.warn('Шаг 2: ⚠️ Пропущен -', err.message);
-        // Продолжаем без превью
+        // Продолжаем БЕЗ превью - это не критично
       }
     } else {
       console.log('Шаг 2: ⏭️ Пропущен (нет превью)');
@@ -272,29 +285,44 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     // Шаг 3: Сохраняем в БД
     console.log('Шаг 3: Сохранение в БД...');
     const id = uuidv4();
+    
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
       [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
     );
-    console.log('Шаг 3: ✅ OK - ID:', id);
+    console.log('Шаг 3: ✅ OK - Проект ID:', id);
 
+    // Шаг 4: Создаем объект проекта
+    console.log('Шаг 4: Подготовка ответа...');
     const newProject = {
-      id, name: name || file.originalname, description,
-      type: 'file', original_name: file.originalname,
-      preview_path: previewPath, file_size: file.size,
-      downloads: 0, created_at: new Date().toISOString()
+      id, 
+      name: name || file.originalname, 
+      description,
+      type: 'file', 
+      original_name: file.originalname,
+      preview_path: previewPath, 
+      file_size: file.size,
+      downloads: 0, 
+      created_at: new Date().toISOString()
     };
+    console.log('Шаг 4: ✅ OK');
 
+    // Шаг 5: Отправляем WebSocket событие
+    console.log('Шаг 5: Отправка события клиентам...');
     io.emit('new_project', newProject);
-    console.log('📡 Событие отправлено в браузеры');
+    console.log('Шаг 5: ✅ OK');
+
+    // Шаг 6: Отправляем ответ
+    console.log('Шаг 6: Отправка ответа клиенту...');
+    res.status(200).json({ success: true, project: newProject });
     console.log('✅ === ЗАГРУЗКА ЗАВЕРШЕНА УСПЕШНО ===\n');
     
-    res.status(200).json({ success: true, project: newProject });
   } catch (err) {
     console.error('❌ === ОШИБКА ЗАГРУЗКИ ===');
+    console.error('Шаг:', err.step || 'неизвестный');
     console.error('Сообщение:', err.message);
-    console.error('Стек:', err.stack);
+    console.error('Код:', err.code || 'нет');
     console.error('===========================\n');
     
     if (!res.headersSent) {
