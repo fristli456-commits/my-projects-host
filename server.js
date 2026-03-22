@@ -128,25 +128,29 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Загрузить файл в B2 через stream
-async function uploadToB2Stream(fileBuffer, originalName, mimetype) {
-  const key = `uploads/${uuidv4()}-${originalName}`;
-  try {
-    console.log('🔄 Отправляем в B2:', key, 'Размер:', (fileBuffer.length / 1024 / 1024).toFixed(2) + ' MB');
-    
-    const result = await s3.send(new PutObjectCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      Body: fileBuffer,
-      ContentType: mimetype,
-    }));
-    
-    console.log('✅ Успешно загружено в B2:', key);
-    return key;
-  } catch (err) {
-    console.error('❌ B2 ошибка:', err.message);
-    throw new Error('Ошибка загрузки: ' + err.message);
-  }
+// Асинхронная загрузка в B2 (в фоне, не ожидаем)
+async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId) {
+  setImmediate(async () => {
+    try {
+      console.log('🔄 [ФОНЕ] Загружаем в B2:', projectId);
+      const key = `uploads/${uuidv4()}-${originalName}`;
+      
+      await s3.send(new PutObjectCommand({
+        Bucket: B2_BUCKET,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: mimetype,
+      }));
+      
+      console.log('✅ [ФОНЕ] Загружено в B2:', key);
+      
+      // Обновляем file_key в БД
+      await pool.query('UPDATE projects SET file_key = $1 WHERE id = $2', [key, projectId]);
+      console.log('✅ [ФОНЕ] БД обновлена');
+    } catch (err) {
+      console.error('❌ [ФОНЕ] Ошибка B2:', err.message);
+    }
+  });
 }
 
 // Удалить файл из B2
@@ -231,28 +235,25 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     return res.status(400).json({ error: 'Файл не загружен' });
   }
 
-  let fileKey = null;
-
   try {
     console.log('\n📤 === НАЧАЛО ЗАГРУЗКИ ===');
     console.log('Файл:', file.originalname);
     console.log('Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
     console.log('Имя проекта:', name);
     
-    // Шаг 1: Загружаем основной файл в B2
-    console.log('Шаг 1: Загрузка в B2...');
-    fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
-    console.log('Шаг 1: ✅ OK - Ключ:', fileKey);
-
-    // Шаг 2: Загружаем превью в Cloudinary если есть (опционально)
+    // Создаем ID проекта сразу
+    const id = uuidv4();
+    console.log('Шаг 1: Создание записи в БД с пустым file_key...');
+    
+    // Шаг 1: Загружаем превью в Cloudinary если есть (быстро)
     let previewPath = null;
     let previewPublicId = null;
     
     if (previewFile) {
-      console.log('Шаг 2: Загрузка превью...');
+      console.log('Шаг 2: Загрузка превью в Cloudinary...');
       try {
         const uploaded = await new Promise((resolve, reject) => {
-          const timeoutId = setTimeout(() => reject(new Error('Таймаут Cloudinary')), 30000); // 30 сек таймаут
+          const timeoutId = setTimeout(() => reject(new Error('Таймаут Cloudinary')), 30000);
           
           const stream = cloudinary.uploader.upload_stream(
             { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
@@ -273,27 +274,24 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
         
         previewPath = uploaded.secure_url;
         previewPublicId = uploaded.public_id;
-        console.log('Шаг 2: ✅ OK - ID:', previewPublicId);
+        console.log('Шаг 2: ✅ Превью OK -', previewPublicId);
       } catch (err) {
         console.warn('Шаг 2: ⚠️ Пропущен -', err.message);
-        // Продолжаем БЕЗ превью - это не критично
       }
     } else {
       console.log('Шаг 2: ⏭️ Пропущен (нет превью)');
     }
 
-    // Шаг 3: Сохраняем в БД
+    // Шаг 3: Сохраняем в БД СРАЗУ (БЕЗ file_key, будет добавлен позже)
     console.log('Шаг 3: Сохранение в БД...');
-    const id = uuidv4();
-    
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
-      [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
+      [id, name || file.originalname, description, file.originalname, file.originalname, '', previewPath, previewPublicId, file.size]
     );
     console.log('Шаг 3: ✅ OK - Проект ID:', id);
 
-    // Шаг 4: Создаем объект проекта
+    // Шаг 4: Подготовим объект проекта
     console.log('Шаг 4: Подготовка ответа...');
     const newProject = {
       id, 
@@ -308,21 +306,21 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     };
     console.log('Шаг 4: ✅ OK');
 
-    // Шаг 5: Отправляем WebSocket событие
-    console.log('Шаг 5: Отправка события клиентам...');
+    // Шаг 5: СРАЗУ отправляем ответ клиенту (БЕЗ ожидания B2)
+    console.log('Шаг 5: Отправка события и ответа...');
     io.emit('new_project', newProject);
-    console.log('Шаг 5: ✅ OK');
-
-    // Шаг 6: Отправляем ответ
-    console.log('Шаг 6: Отправка ответа клиенту...');
     res.status(200).json({ success: true, project: newProject });
-    console.log('✅ === ЗАГРУЗКА ЗАВЕРШЕНА УСПЕШНО ===\n');
+    console.log('Шаг 5: ✅ Клиент получил ответ');
+
+    // Шаг 6: АСИНХРОННО загружаем в B2 (В ФОНЕ)
+    console.log('Шаг 6: Запуск асинхронной загрузки в B2...');
+    uploadToB2Async(file.buffer, file.originalname, file.mimetype, id);
+    console.log('Шаг 6: ✅ Загрузка в фоне запущена');
+    console.log('✅ === ЗАГРУЗКА ЗАВЕРШЕНА (ответ отправлен) ===\n');
     
   } catch (err) {
     console.error('❌ === ОШИБКА ЗАГРУЗКИ ===');
-    console.error('Шаг:', err.step || 'неизвестный');
     console.error('Сообщение:', err.message);
-    console.error('Код:', err.code || 'нет');
     console.error('===========================\n');
     
     if (!res.headersSent) {
