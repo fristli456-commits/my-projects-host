@@ -1,14 +1,15 @@
 const express = require('express');
 const multer = require('multer');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,79 +17,66 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-const PORT = 3000;
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
-const PREVIEW_DIR = path.join(__dirname, 'uploads', 'previews');
+const PORT = process.env.PORT || 3000;
 
-// Создаём папки
-[UPLOAD_DIR, PREVIEW_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// PostgreSQL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/files', express.static(UPLOAD_DIR));
-app.use('/previews', express.static(PREVIEW_DIR));
 
-// Сессии
 app.use(session({
-  secret: 'your-secret-key-change-this',
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// В самом начале, после импортов
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    next();
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
 });
 
-// Настройка загрузки файлов
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === 'preview') {
-      cb(null, PREVIEW_DIR);
-    } else {
-      cb(null, UPLOAD_DIR);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}-${file.originalname}`;
-    cb(null, uniqueName);
-  }
+// Cloudinary storage
+const fileStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: file.fieldname === 'preview' ? 'previews' : 'uploads',
+    resource_type: 'auto',
+    public_id: uuidv4(),
+  }),
 });
 
-const upload = multer({ 
-  storage: storage,
+const upload = multer({
+  storage: fileStorage,
   limits: { fileSize: 500 * 1024 * 1024 }
 });
 
-// SQLite
-const db = new sqlite3.Database('./database.sqlite', (err) => {
-  if (err) console.error('Ошибка БД:', err);
-  else {
-    console.log('Подключено к SQLite');
-    initDB();
-  }
-});
-
-function initDB() {
-  // Таблица пользователей
-  db.run(`
+// Инициализация БД
+async function initDB() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       is_admin INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  // Таблица проектов (обновлённая)
-  db.run(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -97,135 +85,100 @@ function initDB() {
       filename TEXT,
       original_name TEXT,
       file_path TEXT,
+      file_public_id TEXT,
       link_url TEXT,
       preview_path TEXT,
+      preview_public_id TEXT,
       file_size INTEGER,
       downloads INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-  `, () => {
-    // Создаём админа Fristli если нет
-    createDefaultAdmin();
-  });
+  `);
+
+  await createDefaultAdmin();
+  console.log('✅ База данных готова');
 }
 
 async function createDefaultAdmin() {
-  const adminExists = await new Promise((resolve) => {
-    db.get('SELECT * FROM users WHERE username = ?', ['Fristli'], (err, row) => {
-      resolve(!!row);
-    });
-  });
-
-  if (!adminExists) {
+  const result = await pool.query('SELECT * FROM users WHERE username = $1', ['Fristli']);
+  if (result.rows.length === 0) {
     const password = process.env.ADMIN_PASSWORD || 'admin123';
     const hash = await bcrypt.hash(password, 10);
-    db.run(
-      'INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, 1)',
+    await pool.query(
+      'INSERT INTO users (id, username, password_hash, is_admin) VALUES ($1, $2, $3, 1)',
       [uuidv4(), 'Fristli', hash]
     );
     console.log('✅ Админ Fristli создан');
   }
 }
 
-// Middleware проверки авторизации
+// Auth middleware
 function requireAuth(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: 'Требуется авторизация' });
-  }
+  if (!req.session.userId) return res.status(401).json({ error: 'Требуется авторизация' });
   next();
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.session.userId || !req.session.isAdmin) {
-    return res.status(403).json({ error: 'Требуются права администратора' });
-  }
+  if (!req.session.userId || !req.session.isAdmin) return res.status(403).json({ error: 'Требуются права администратора' });
   next();
 }
 
 // ===== API РОУТЫ =====
 
-// Регистрация (только для обычных пользователей)
+// Регистрация
 app.post('/api/register', async (req, res) => {
-    console.log('Попытка регистрации:', req.body);
-    
-    const { username, password } = req.body;
-    
-    if (!username || !password) {
-        console.log('Ошибка: не все поля заполнены');
-        return res.status(400).json({ error: 'Заполните все поля' });
-    }
+  console.log('Попытка регистрации:', req.body);
+  const { username, password } = req.body;
 
-    if (username === 'Fristli') {
-        console.log('Ошибка: попытка регистрации зарезервированного имени');
-        return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
-    }
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Заполните все поля' });
+  }
+  if (username === 'Fristli') {
+    return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
+  }
 
-    try {
-        const hash = await bcrypt.hash(password, 10);
-        const id = uuidv4();
-        
-        console.log('Создание пользователя:', { id, username });
-        
-        db.run(
-            'INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, ?)',
-            [id, username, hash, 0],
-            function(err) {
-                if (err) {
-                    console.error('Ошибка SQL:', err);
-                    if (err.message && (err.message.includes('UNIQUE') || err.message.includes('unique'))) {
-                        return res.status(400).json({ error: 'Никнейм уже занят' });
-                    }
-                    return res.status(500).json({ error: 'Ошибка базы данных' });
-                }
-                console.log('Пользователь создан успешно');
-                res.json({ success: true, message: 'Регистрация успешна' });
-            }
-        );
-    } catch (error) {
-        console.error('Ошибка сервера:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const id = uuidv4();
+    await pool.query(
+      'INSERT INTO users (id, username, password_hash, is_admin) VALUES ($1, $2, $3, 0)',
+      [id, username, hash]
+    );
+    console.log('Пользователь создан успешно');
+    res.json({ success: true, message: 'Регистрация успешна' });
+  } catch (err) {
+    console.error('Ошибка SQL:', err);
+    if (err.code === '23505') return res.status(400).json({ error: 'Никнейм уже занят' });
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 });
 
 // Вход
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-
-  db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-    if (err || !user) {
-      return res.status(401).json({ error: 'Неверный логин или пароль' });
-    }
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = result.rows[0];
+    if (!user) return res.status(401).json({ error: 'Неверный логин или пароль' });
 
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: 'Неверный логин или пароль' });
-    }
+    if (!valid) return res.status(401).json({ error: 'Неверный логин или пароль' });
 
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.isAdmin = user.is_admin === 1;
 
-    res.json({
-      success: true,
-      user: {
-        username: user.username,
-        isAdmin: user.is_admin === 1
-      }
-    });
-  });
+    res.json({ success: true, user: { username: user.username, isAdmin: user.is_admin === 1 } });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 });
 
 // Проверка сессии
 app.get('/api/me', (req, res) => {
-  if (!req.session.userId) {
-    return res.json({ authenticated: false });
-  }
-  res.json({
-    authenticated: true,
-    username: req.session.username,
-    isAdmin: req.session.isAdmin
-  });
+  if (!req.session.userId) return res.json({ authenticated: false });
+  res.json({ authenticated: true, username: req.session.username, isAdmin: req.session.isAdmin });
 });
 
 // Выход
@@ -234,162 +187,161 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Получить проекты (доступно всем)
-app.get('/api/projects', (req, res) => {
-  db.all('SELECT * FROM projects ORDER BY created_at DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+// Получить проекты
+app.get('/api/projects', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Загрузить файл (только админ)
 app.post('/api/upload', requireAdmin, upload.fields([
   { name: 'file', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
-]), (req, res) => {
+]), async (req, res) => {
   const { name, description } = req.body;
   const file = req.files['file']?.[0];
   const preview = req.files['preview']?.[0];
 
-  if (!file) {
-    return res.status(400).json({ error: 'Файл не загружен' });
-  }
+  if (!file) return res.status(400).json({ error: 'Файл не загружен' });
 
   const id = uuidv4();
-  const previewPath = preview ? `/previews/${preview.filename}` : null;
+  const previewPath = preview ? preview.path : null;
+  const previewPublicId = preview ? preview.filename : null;
 
-  db.run(
-    `INSERT INTO projects (id, name, description, type, filename, original_name, file_path, preview_path, file_size)
-     VALUES (?, ?, ?, 'file', ?, ?, ?, ?, ?)`,
-    [id, name || file.originalname, description, file.filename, file.originalname, file.path, previewPath, file.size],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      
-      const newProject = {
-        id, name: name || file.originalname, description, 
-        type: 'file', original_name: file.originalname,
-        preview_path: previewPath,
-        file_size: file.size, downloads: 0,
-        created_at: new Date().toISOString()
-      };
-      
-      io.emit('new_project', newProject);
-      res.json({ success: true, project: newProject });
-    }
-  );
+  try {
+    await pool.query(
+      `INSERT INTO projects (id, name, description, type, filename, original_name, file_path, file_public_id, preview_path, preview_public_id, file_size)
+       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10)`,
+      [id, name || file.originalname, description, file.filename, file.originalname, file.path, file.filename, previewPath, previewPublicId, file.size]
+    );
+
+    const newProject = {
+      id, name: name || file.originalname, description,
+      type: 'file', original_name: file.originalname,
+      file_path: file.path, preview_path: previewPath,
+      file_size: file.size, downloads: 0,
+      created_at: new Date().toISOString()
+    };
+
+    io.emit('new_project', newProject);
+    res.json({ success: true, project: newProject });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Добавить ссылку (только админ)
-app.post('/api/link', requireAdmin, upload.single('preview'), (req, res) => {
+app.post('/api/link', requireAdmin, upload.single('preview'), async (req, res) => {
   const { name, description, url } = req.body;
-  
-  if (!name || !url) {
-    return res.status(400).json({ error: 'Название и URL обязательны' });
-  }
+  if (!name || !url) return res.status(400).json({ error: 'Название и URL обязательны' });
 
   const id = uuidv4();
-  const previewPath = req.file ? `/previews/${req.file.filename}` : null;
+  const previewPath = req.file ? req.file.path : null;
+  const previewPublicId = req.file ? req.file.filename : null;
 
-  db.run(
-    `INSERT INTO projects (id, name, description, type, link_url, preview_path)
-     VALUES (?, ?, ?, 'link', ?, ?)`,
-    [id, name, description, url, previewPath],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      
-      const newProject = {
-        id, name, description, type: 'link', 
-        link_url: url, preview_path: previewPath,
-        downloads: 0,
-        created_at: new Date().toISOString()
-      };
-      
-      io.emit('new_project', newProject);
-      res.json({ success: true, project: newProject });
-    }
-  );
+  try {
+    await pool.query(
+      `INSERT INTO projects (id, name, description, type, link_url, preview_path, preview_public_id)
+       VALUES ($1, $2, $3, 'link', $4, $5, $6)`,
+      [id, name, description, url, previewPath, previewPublicId]
+    );
+
+    const newProject = {
+      id, name, description, type: 'link',
+      link_url: url, preview_path: previewPath,
+      downloads: 0, created_at: new Date().toISOString()
+    };
+    io.emit('new_project', newProject);
+    res.json({ success: true, project: newProject });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Редактировать проект (только админ)
-app.put('/api/projects/:id', requireAdmin, upload.single('preview'), (req, res) => {
+app.put('/api/projects/:id', requireAdmin, upload.single('preview'), async (req, res) => {
   const { id } = req.params;
   const { name, description, url } = req.body;
 
-  // Сначала получаем текущие данные
-  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, project) => {
-    if (err || !project) {
-      return res.status(404).json({ error: 'Проект не найден' });
-    }
+  try {
+    const result = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
+    const project = result.rows[0];
+    if (!project) return res.status(404).json({ error: 'Проект не найден' });
 
-    let updateQuery, params;
-    const previewPath = req.file ? `/previews/${req.file.filename}` : project.preview_path;
+    let previewPath = project.preview_path;
+    let previewPublicId = project.preview_public_id;
+
+    if (req.file) {
+      if (project.preview_public_id) {
+        await cloudinary.uploader.destroy(project.preview_public_id);
+      }
+      previewPath = req.file.path;
+      previewPublicId = req.file.filename;
+    }
 
     if (project.type === 'file') {
-      updateQuery = `UPDATE projects SET name = ?, description = ?, preview_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-      params = [name, description, previewPath, id];
+      await pool.query(
+        `UPDATE projects SET name = $1, description = $2, preview_path = $3, preview_public_id = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
+        [name, description, previewPath, previewPublicId, id]
+      );
     } else {
-      updateQuery = `UPDATE projects SET name = ?, description = ?, link_url = ?, preview_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-      params = [name, description, url, previewPath, id];
+      await pool.query(
+        `UPDATE projects SET name = $1, description = $2, link_url = $3, preview_path = $4, preview_public_id = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6`,
+        [name, description, url, previewPath, previewPublicId, id]
+      );
     }
 
-    db.run(updateQuery, params, function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-
-      // Удаляем старое превью если загружено новое
-      if (req.file && project.preview_path) {
-        const oldPreview = path.join(__dirname, project.preview_path);
-        if (fs.existsSync(oldPreview)) fs.unlinkSync(oldPreview);
-      }
-
-      io.emit('update_project', { id, name, description, url, preview_path: previewPath });
-      res.json({ success: true });
-    });
-  });
+    io.emit('update_project', { id, name, description, url, preview_path: previewPath });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Удалить проект (только админ)
-app.delete('/api/projects/:id', requireAdmin, (req, res) => {
+app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
-  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, row) => {
-    if (err || !row) return res.status(404).json({ error: 'Проект не найден' });
+  try {
+    const result = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'Проект не найден' });
 
-    // Удаляем файлы
-    if (row.type === 'file' && fs.existsSync(row.file_path)) {
-      fs.unlinkSync(row.file_path);
+    if (row.file_public_id) {
+      await cloudinary.uploader.destroy(row.file_public_id, { resource_type: 'auto' });
     }
-    if (row.preview_path) {
-      const previewPath = path.join(__dirname, row.preview_path);
-      if (fs.existsSync(previewPath)) fs.unlinkSync(previewPath);
+    if (row.preview_public_id) {
+      await cloudinary.uploader.destroy(row.preview_public_id);
     }
 
-    db.run('DELETE FROM projects WHERE id = ?', [id], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      
-      io.emit('delete_project', { id });
-      res.json({ success: true });
-    });
-  });
+    await pool.query('DELETE FROM projects WHERE id = $1', [id]);
+    io.emit('delete_project', { id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Скачать файл (доступно всем)
-app.get('/api/download/:id', (req, res) => {
+// Скачать файл
+app.get('/api/download/:id', async (req, res) => {
   const { id } = req.params;
 
-  db.get('SELECT * FROM projects WHERE id = ?', [id], (err, row) => {
-    if (err || !row) return res.status(404).json({ error: 'Не найдено' });
+  try {
+    const result = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'Не найдено' });
 
-    if (row.type === 'link') {
-      db.run('UPDATE projects SET downloads = downloads + 1 WHERE id = ?', [id]);
-      return res.redirect(row.link_url);
-    }
+    await pool.query('UPDATE projects SET downloads = downloads + 1 WHERE id = $1', [id]);
 
-    db.run('UPDATE projects SET downloads = downloads + 1 WHERE id = ?', [id]);
-
-    res.download(row.file_path, row.original_name, (err) => {
-      if (err) res.status(500).json({ error: 'Ошибка скачивания' });
-    });
-  });
+    if (row.type === 'link') return res.redirect(row.link_url);
+    res.redirect(row.file_path);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // WebSocket
@@ -401,107 +353,84 @@ io.on('connection', (socket) => {
 // ===== НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ =====
 
 // Получить информацию о пользователе
-app.get('/api/user/info', requireAuth, (req, res) => {
-    db.get(
-        'SELECT id, username, is_admin, created_at FROM users WHERE id = ?',
-        [req.session.userId],
-        (err, user) => {
-            if (err || !user) {
-                return res.status(404).json({ error: 'Пользователь не найден' });
-            }
-            res.json({ success: true, user });
-        }
+app.get('/api/user/info', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, username, is_admin, created_at FROM users WHERE id = $1',
+      [req.session.userId]
     );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Смена никнейма
 app.post('/api/user/change-username', requireAuth, async (req, res) => {
-    const { newUsername, password } = req.body;
-    
-    if (!newUsername || !password) {
-        return res.status(400).json({ error: 'Заполните все поля' });
+  const { newUsername, password } = req.body;
+
+  if (!newUsername || !password) return res.status(400).json({ error: 'Заполните все поля' });
+  if (newUsername.length < 3 || newUsername.length > 20) return res.status(400).json({ error: 'Ник должен быть от 3 до 20 символов' });
+
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Неверный пароль' });
+
+    if (newUsername === 'Fristli' && user.username !== 'Fristli') {
+      return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
     }
-    
-    if (newUsername.length < 3 || newUsername.length > 20) {
-        return res.status(400).json({ error: 'Ник должен быть от 3 до 20 символов' });
-    }
-    
-    // Проверяем пароль
-    db.get('SELECT * FROM users WHERE id = ?', [req.session.userId], async (err, user) => {
-        if (err || !user) {
-            return res.status(404).json({ error: 'Пользователь не найден' });
-        }
-        
-        const valid = await bcrypt.compare(password, user.password_hash);
-        if (!valid) {
-            return res.status(401).json({ error: 'Неверный пароль' });
-        }
-        
-        // Проверяем, не занят ли ник
-        if (newUsername === 'Fristli' && user.username !== 'Fristli') {
-            return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
-        }
-        
-        db.get('SELECT * FROM users WHERE username = ? AND id != ?', [newUsername, user.id], (err, existing) => {
-            if (existing) {
-                return res.status(400).json({ error: 'Этот никнейм уже занят' });
-            }
-            
-            db.run(
-                'UPDATE users SET username = ? WHERE id = ?',
-                [newUsername, user.id],
-                function(err) {
-                    if (err) {
-                        return res.status(500).json({ error: 'Ошибка обновления' });
-                    }
-                    
-                    req.session.username = newUsername;
-                    res.json({ success: true, username: newUsername });
-                }
-            );
-        });
-    });
+
+    const existing = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND id != $2',
+      [newUsername, user.id]
+    );
+    if (existing.rows.length > 0) return res.status(400).json({ error: 'Этот никнейм уже занят' });
+
+    await pool.query('UPDATE users SET username = $1 WHERE id = $2', [newUsername, user.id]);
+    req.session.username = newUsername;
+    res.json({ success: true, username: newUsername });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка обновления' });
+  }
 });
 
 // Смена пароля
 app.post('/api/user/change-password', requireAuth, async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    
-    if (!currentPassword || !newPassword) {
-        return res.status(400).json({ error: 'Заполните все поля' });
-    }
-    
-    if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Новый пароль должен быть минимум 6 символов' });
-    }
-    
-    db.get('SELECT * FROM users WHERE id = ?', [req.session.userId], async (err, user) => {
-        if (err || !user) {
-            return res.status(404).json({ error: 'Пользователь не найден' });
-        }
-        
-        const valid = await bcrypt.compare(currentPassword, user.password_hash);
-        if (!valid) {
-            return res.status(401).json({ error: 'Неверный текущий пароль' });
-        }
-        
-        const newHash = await bcrypt.hash(newPassword, 10);
-        
-        db.run(
-            'UPDATE users SET password_hash = ? WHERE id = ?',
-            [newHash, user.id],
-            function(err) {
-                if (err) {
-                    return res.status(500).json({ error: 'Ошибка обновления пароля' });
-                }
-                res.json({ success: true });
-            }
-        );
-    });
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Заполните все поля' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'Новый пароль должен быть минимум 6 символов' });
+
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Неверный текущий пароль' });
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка обновления пароля' });
+  }
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Сервер: http://localhost:${PORT}`);
-  console.log(`🔐 Админ-панель: http://localhost:${PORT}/admin.html`);
-  console.log(`👤 Логин: Fristli / Пароль: admin123`);
+// Запуск
+initDB().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 Сервер: http://localhost:${PORT}`);
+    console.log(`🔐 Админ-панель: http://localhost:${PORT}/admin.html`);
+    console.log(`👤 Логин: Fristli`);
+  });
+}).catch(err => {
+  console.error('Ошибка запуска:', err);
+  process.exit(1);
 });
