@@ -13,6 +13,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const app = express();
 const server = http.createServer(app);
+server.setTimeout(1200000); // 20 минут для больших файлов
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
@@ -228,11 +229,13 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     return res.status(400).json({ error: 'Файл не загружен' });
   }
 
+  let fileKey = null;
+
   try {
     console.log('📤 Загрузка файла:', file.originalname, 'Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
     
     // Загружаем основной файл в B2
-    const fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
+    fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
 
     // Загружаем превью в Cloudinary если есть
     let previewPath = null;
@@ -251,7 +254,6 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
         console.log('✅ Превью загружено:', previewPublicId);
       } catch (err) {
         console.warn('⚠️  Ошибка Cloudinary:', err.message);
-        // Не ломаем весь процесс если превью не загрузилось
       }
     }
 
@@ -272,10 +274,15 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
 
     io.emit('new_project', newProject);
     console.log('✅ Проект успешно создан:', id);
-    res.json({ success: true, project: newProject });
+    
+    // Гарантируем отправку ответа
+    res.status(200).json({ success: true, project: newProject });
   } catch (err) {
     console.error('❌ Ошибка upload:', err);
-    res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
+    // Даже при ошибке отправляем ответ чтобы не зависла клиент
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
+    }
   }
 });
 

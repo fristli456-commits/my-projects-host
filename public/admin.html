@@ -580,29 +580,36 @@
 
                 xhr.onload = () => {
                     if (xhr.status === 200) {
-                        const result = JSON.parse(xhr.responseText);
-                        if (result.success) {
-                            document.getElementById('uploadForm').reset();
-                            document.getElementById('fileInfo').classList.remove('show');
-                            document.getElementById('previewThumb').classList.remove('show');
-                            progressBar.classList.remove('show');
-                            progressFill.style.width = '0%';
-                            progressFill.textContent = '0%';
-                            showNotification('✅ Файл загружен успешно!', 'success');
-                            loadAdminProjects();
-                        } else {
-                            throw new Error(result.error || 'Ошибка сохранения');
+                        try {
+                            const result = JSON.parse(xhr.responseText);
+                            if (result.success) {
+                                document.getElementById('uploadForm').reset();
+                                document.getElementById('fileInfo').classList.remove('show');
+                                document.getElementById('previewThumb').classList.remove('show');
+                                progressBar.classList.remove('show');
+                                progressFill.style.width = '0%';
+                                progressFill.textContent = '0%';
+                                showNotification('✅ Файл загружен успешно!', 'success');
+                                setTimeout(() => loadAdminProjects(), 1000);
+                            } else {
+                                throw new Error(result.error || 'Ошибка сохранения');
+                            }
+                        } catch (e) {
+                            throw new Error('Ошибка парсинга ответа: ' + e.message);
                         }
+                    } else if (xhr.status === 0) {
+                        throw new Error('Таймаут или сервер недоступен');
                     } else {
-                        throw new Error('Ошибка сервера: ' + xhr.status);
+                        throw new Error('Ошибка сервера: ' + xhr.status + ' ' + xhr.statusText);
                     }
                 };
 
-                xhr.onerror = () => {
-                    throw new Error('Ошибка сети');
+                xhr.ontimeout = () => {
+                    throw new Error('Таймаут загрузки (сервер долго обрабатывает)');
                 };
 
                 xhr.open('POST', '/api/upload', true);
+                xhr.timeout = 600000; // 10 минут таймаут
                 xhr.send(formData);
             } catch (error) {
                 console.error('Ошибка:', error);
