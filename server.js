@@ -227,6 +227,62 @@ app.post('/api/presigned-url', requireAdmin, async (req, res) => {
   }
 });
 
+// ЗАГРУЗКА ФАЙЛА (через сервер - без CORS проблем)
+app.post('/api/upload', requireAdmin, memoryUpload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'preview', maxCount: 1 }
+]), async (req, res) => {
+  const { name, description } = req.body;
+  const file = req.files['file']?.[0];
+  const previewFile = req.files['preview']?.[0];
+
+  if (!file) {
+    return res.status(400).json({ error: 'Файл не загружен' });
+  }
+
+  try {
+    console.log('Загрузка файла:', file.originalname, 'Размер:', file.size);
+    
+    // Загружаем основной файл в B2
+    const fileKey = await uploadToB2(file.buffer, file.originalname, file.mimetype);
+    console.log('Файл загружен в B2:', fileKey);
+
+    // Загружаем превью в Cloudinary если есть
+    let previewPath = null;
+    let previewPublicId = null;
+    if (previewFile) {
+      const uploaded = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+          (err, result) => err ? reject(err) : resolve(result)
+        ).end(previewFile.buffer);
+      });
+      previewPath = uploaded.secure_url;
+      previewPublicId = uploaded.public_id;
+    }
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
+       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
+      [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
+    );
+
+    const newProject = {
+      id, name: name || file.originalname, description,
+      type: 'file', original_name: file.originalname,
+      preview_path: previewPath, file_size: file.size,
+      downloads: 0, created_at: new Date().toISOString()
+    };
+
+    io.emit('new_project', newProject);
+    res.json({ success: true, project: newProject });
+  } catch (err) {
+    console.error('Ошибка upload:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Получить проекты
 app.get('/api/projects', async (req, res) => {
   try {
@@ -289,52 +345,6 @@ app.post('/api/upload', requireAdmin, memoryUpload.fields([
     res.json({ success: true, project: newProject });
   } catch (err) {
     console.error('Ошибка upload:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Сохранить информацию о загруженном файле
-app.post('/api/save-project', requireAdmin, memoryUpload.single('preview'), async (req, res) => {
-  const { name, description, fileKey, originalName, fileSize } = req.body;
-  const previewFile = req.file;
-
-  if (!fileKey || !originalName) {
-    return res.status(400).json({ error: 'Отсутствуют данные файла' });
-  }
-
-  try {
-    let previewPath = null;
-    let previewPublicId = null;
-
-    if (previewFile) {
-      const uploaded = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
-          (err, result) => err ? reject(err) : resolve(result)
-        ).end(previewFile.buffer);
-      });
-      previewPath = uploaded.secure_url;
-      previewPublicId = uploaded.public_id;
-    }
-
-    const id = uuidv4();
-    await pool.query(
-      `INSERT INTO projects (id, name, description, type, original_name, file_key, preview_path, preview_public_id, file_size)
-       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8)`,
-      [id, name || originalName, description, originalName, fileKey, previewPath, previewPublicId, fileSize]
-    );
-
-    const newProject = {
-      id, name: name || originalName, description,
-      type: 'file', original_name: originalName,
-      preview_path: previewPath, file_size: fileSize,
-      downloads: 0, created_at: new Date().toISOString()
-    };
-
-    io.emit('new_project', newProject);
-    res.json({ success: true, project: newProject });
-  } catch (err) {
-    console.error('Ошибка save-project:', err);
     res.status(500).json({ error: err.message });
   }
 });
