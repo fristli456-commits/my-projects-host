@@ -214,8 +214,8 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// ЗАГРУЗКА ФАЙЛА (через сервер - без CORS проблем)
-app.post('/api/upload', requireAdmin, memoryUpload.fields([
+// ЗАГРУЗКА ФАЙЛА (через сервер)
+app.post('/api/upload', requireAdmin, diskUpload.fields([
   { name: 'file', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
 ]), async (req, res) => {
