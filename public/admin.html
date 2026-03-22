@@ -587,7 +587,9 @@
                             document.getElementById('previewThumb').classList.remove('show');
                             progressBar.classList.remove('show');
                             progressFill.style.width = '0%';
+                            progressFill.textContent = '0%';
                             showNotification('✅ Файл загружен успешно!', 'success');
+                            loadAdminProjects();
                         } else {
                             throw new Error(result.error || 'Ошибка сохранения');
                         }

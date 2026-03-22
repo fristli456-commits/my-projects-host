@@ -56,15 +56,15 @@ app.use(session({
   cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// Multer — храним в памяти
-const memoryUpload = multer({
+// Multer — файлы на диск для потоковой обработки
+const diskUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB лимит
+  limits: { fileSize: 1024 * 1024 * 1024 } // 1GB лимит
 });
 
 // Увеличиваем таймауты для больших файлов
 app.use((req, res, next) => {
-  res.setTimeout(600000); // 10 минут для загрузки
+  res.setTimeout(1200000); // 20 минут для загрузки
   next();
 });
 
@@ -127,16 +127,22 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Загрузить файл в B2
-async function uploadToB2(buffer, originalName, mimetype) {
+// Загрузить файл в B2 (потоком, экономит память)
+async function uploadToB2Stream(buffer, originalName, mimetype) {
   const key = `uploads/${uuidv4()}-${originalName}`;
-  await s3.send(new PutObjectCommand({
-    Bucket: B2_BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: mimetype,
-  }));
-  return key;
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: B2_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mimetype,
+    }));
+    console.log('✅ Файл загружен в B2:', key);
+    return key;
+  } catch (err) {
+    console.error('❌ Ошибка B2:', err.message);
+    throw err;
+  }
 }
 
 // Удалить файл из B2
@@ -208,25 +214,6 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Получить подписанный URL для загрузки в B2
-app.post('/api/presigned-url', requireAdmin, async (req, res) => {
-  const { filename, contentType } = req.body;
-  if (!filename) return res.status(400).json({ error: 'Требуется имя файла' });
-
-  try {
-    const key = `uploads/${uuidv4()}-${filename}`;
-    const command = new PutObjectCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      ContentType: contentType || 'application/octet-stream',
-    });
-    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    res.json({ success: true, url, key });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ЗАГРУЗКА ФАЙЛА (через сервер - без CORS проблем)
 app.post('/api/upload', requireAdmin, memoryUpload.fields([
   { name: 'file', maxCount: 1 },
@@ -293,8 +280,8 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-// ЗАГРУЗКА ФАЙЛА (через сервер - без CORS проблем)
-app.post('/api/upload', requireAdmin, memoryUpload.fields([
+// ЗАГРУЗКА ФАЙЛА (через сервер)
+app.post('/api/upload', requireAdmin, diskUpload.fields([
   { name: 'file', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
 ]), async (req, res) => {
@@ -307,24 +294,28 @@ app.post('/api/upload', requireAdmin, memoryUpload.fields([
   }
 
   try {
-    console.log('Загрузка файла:', file.originalname, 'Размер:', file.size);
+    console.log('📤 Загрузка файла:', file.originalname, 'Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
     
     // Загружаем основной файл в B2
-    const fileKey = await uploadToB2(file.buffer, file.originalname, file.mimetype);
-    console.log('Файл загружен в B2:', fileKey);
+    const fileKey = await uploadToB2Stream(file.buffer, file.originalname, file.mimetype);
 
     // Загружаем превью в Cloudinary если есть
     let previewPath = null;
     let previewPublicId = null;
     if (previewFile) {
-      const uploaded = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
-          (err, result) => err ? reject(err) : resolve(result)
-        ).end(previewFile.buffer);
-      });
-      previewPath = uploaded.secure_url;
-      previewPublicId = uploaded.public_id;
+      try {
+        const uploaded = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+            (err, result) => err ? reject(err) : resolve(result)
+          ).end(previewFile.buffer);
+        });
+        previewPath = uploaded.secure_url;
+        previewPublicId = uploaded.public_id;
+        console.log('🖼️  Превью загружено:', previewPublicId);
+      } catch (err) {
+        console.warn('⚠️  Ошибка загрузки превью:', err.message);
+      }
     }
 
     const id = uuidv4();
@@ -342,15 +333,16 @@ app.post('/api/upload', requireAdmin, memoryUpload.fields([
     };
 
     io.emit('new_project', newProject);
+    console.log('✅ Проект создан:', id);
     res.json({ success: true, project: newProject });
   } catch (err) {
-    console.error('Ошибка upload:', err);
-    res.status(500).json({ error: err.message });
+    console.error('❌ Ошибка upload:', err);
+    res.status(500).json({ error: err.message || 'Ошибка загрузки файла' });
   }
 });
 
 // Добавить ссылку (только админ)
-app.post('/api/link', requireAdmin, memoryUpload.single('preview'), async (req, res) => {
+app.post('/api/link', requireAdmin, diskUpload.single('preview'), async (req, res) => {
   const { name, description, url } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'Название и URL обязательны' });
 
@@ -385,7 +377,7 @@ app.post('/api/link', requireAdmin, memoryUpload.single('preview'), async (req, 
 });
 
 // Редактировать проект (только админ)
-app.put('/api/projects/:id', requireAdmin, memoryUpload.single('preview'), async (req, res) => {
+app.put('/api/projects/:id', requireAdmin, diskUpload.single('preview'), async (req, res) => {
   const { id } = req.params;
   const { name, description, url } = req.body;
 
