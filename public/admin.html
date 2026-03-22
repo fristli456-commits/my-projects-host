@@ -366,31 +366,27 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Файл приложения (ПК версия) *</label>
-                        <input type="file" name="file" id="fileInput" required>
+                        <label>ПК версия (EXE)</label>
+                        <input type="file" name="file" id="fileInput" accept=".exe">
                         <div class="file-info" id="fileInfo"></div>
                     </div>
                     
                     <div class="form-group">
-                        <label>Превью (скриншот/иконка)</label>
-                        <input type="file" name="preview" id="previewInput" accept="image/*">
-                        <div class="preview-thumb" id="previewThumb"></div>
+                        <label>Мобильная версия (APK)</label>
+                        <input type="file" name="mobileFile" id="mobileFileInput" accept=".apk">
+                        <div class="file-info" id="mobileFileInfo"></div>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label style="display: flex; align-items: center; cursor: pointer; color: #e0e0e0;">
-                        <input type="checkbox" id="mobileVersionToggle" style="width: 20px; height: 20px; cursor: pointer; margin-right: 10px;">
-                        📱 Добавить версию для телефона
-                    </label>
+                    <label>Превью (скриншот/иконка)</label>
+                    <input type="file" name="preview" id="previewInput" accept="image/*">
+                    <div class="preview-thumb" id="previewThumb"></div>
                 </div>
 
-                <div id="mobileVersionSection" style="display: none;">
-                    <div class="form-group">
-                        <label>Файл приложения (Мобильная версия) *</label>
-                        <input type="file" name="mobileFile" id="mobileFileInput">
-                        <div class="file-info" id="mobileFileInfo"></div>
-                    </div>
+                <div style="background: rgba(255, 51, 51, 0.1); border: 1px solid rgba(255, 51, 51, 0.3); padding: 12px; border-radius: 8px; margin: 15px 0; color: #b0b0b0; font-size: 0.9rem;">
+                    <i class="fas fa-info-circle" style="color: #ff6666; margin-right: 8px;"></i>
+                    <span id="fileRequirementText">Обязательно: загрузите хотя бы один файл (EXE или APK)</span>
                 </div>
 
                 <div class="progress-bar" id="progressBar">
@@ -526,20 +522,56 @@
             });
         }
 
-        // Мобильная версия - переключатель
-        document.getElementById('mobileVersionToggle')?.addEventListener('change', function(e) {
-            const mobileSection = document.getElementById('mobileVersionSection');
-            const mobileInput = document.getElementById('mobileFileInput');
+        // Валидация файлов при изменении
+        const updateFileValidation = () => {
+            const pcFile = document.getElementById('fileInput').files[0];
+            const apkFile = document.getElementById('mobileFileInput').files[0];
+            const submitBtn = document.getElementById('submitBtn');
+            const requirementText = document.getElementById('fileRequirementText');
             
-            if (e.target.checked) {
-                mobileSection.style.display = 'block';
-                mobileInput.required = true;
+            const hasAtLeastOne = !!(pcFile || apkFile);
+            
+            if (hasAtLeastOne) {
+                if (pcFile && apkFile) {
+                    requirementText.innerHTML = '<i class="fas fa-check-circle" style="color: #33ff33; margin-right: 8px;"></i>Оба файла выбраны (EXE + APK)';
+                } else if (pcFile) {
+                    requirementText.innerHTML = '<i class="fas fa-check-circle" style="color: #33ff33; margin-right: 8px;"></i>Выбран ПК файл (EXE)';
+                } else {
+                    requirementText.innerHTML = '<i class="fas fa-check-circle" style="color: #33ff33; margin-right: 8px;"></i>Выбран файл для телефона (APK)';
+                }
+                submitBtn.disabled = false;
             } else {
-                mobileSection.style.display = 'none';
-                mobileInput.required = false;
-                mobileInput.value = '';
-                document.getElementById('mobileFileInfo').classList.remove('show');
+                requirementText.innerHTML = '<i class="fas fa-info-circle" style="color: #ff6666; margin-right: 8px;"></i>Обязательно: загрузите хотя бы один файл (EXE или APK)';
+                submitBtn.disabled = true;
             }
+        };
+
+        document.getElementById('fileInput')?.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const info = document.getElementById('fileInfo');
+            
+            if (file) {
+                const size = formatFileSize(file.size);
+                info.innerHTML = `<strong>💻 ${file.name}</strong><br>📊 ${size}`;
+                info.classList.add('show');
+            } else {
+                info.classList.remove('show');
+            }
+            updateFileValidation();
+        });
+
+        document.getElementById('mobileFileInput')?.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const info = document.getElementById('mobileFileInfo');
+            
+            if (file) {
+                const size = formatFileSize(file.size);
+                info.innerHTML = `<strong>📱 ${file.name}</strong><br>📊 ${size}`;
+                info.classList.add('show');
+            } else {
+                info.classList.remove('show');
+            }
+            updateFileValidation();
         });
 
         // Превью
@@ -557,32 +589,6 @@
             }
         });
 
-        // Инфо о ПК файле
-        document.getElementById('fileInput')?.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const info = document.getElementById('fileInfo');
-            
-            if (file) {
-                const size = formatFileSize(file.size);
-                info.innerHTML = `<strong>💻 ${file.name}</strong><br>📊 ${size}`;
-                info.classList.add('show');
-            }
-        });
-
-        // Инфо о мобильном файле
-        document.getElementById('mobileFileInput')?.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const info = document.getElementById('mobileFileInfo');
-            
-            if (file) {
-                const size = formatFileSize(file.size);
-                info.innerHTML = `<strong>📱 ${file.name}</strong><br>📊 ${size}`;
-                info.classList.add('show');
-            } else {
-                info.classList.remove('show');
-            }
-        });
-
         // ЗАГРУЗКА ФАЙЛА (через сервер, сервер загружает в B2)
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -591,19 +597,14 @@
             const progressBar = document.getElementById('progressBar');
             const progressFill = document.getElementById('progressFill');
             const file = document.getElementById('fileInput').files[0];
-            const previewFile = document.getElementById('previewInput').files[0];
-            const mobileToggle = document.getElementById('mobileVersionToggle').checked;
             const mobileFile = document.getElementById('mobileFileInput').files[0];
+            const previewFile = document.getElementById('previewInput').files[0];
             const name = document.getElementById('fileName')?.value || '';
             const description = document.getElementById('fileDescription')?.value || '';
 
-            if (!file) {
-                showNotification('❌ Выберите файл (ПК версия)', 'error');
-                return;
-            }
-
-            if (mobileToggle && !mobileFile) {
-                showNotification('❌ Выберите файл мобильной версии', 'error');
+            // Валидация: хотя бы один файл должен быть выбран
+            if (!file && !mobileFile) {
+                showNotification('❌ Выберите хотя бы один файл (EXE или APK)', 'error');
                 return;
             }
 
@@ -614,10 +615,14 @@
                 const formData = new FormData();
                 formData.append('name', name);
                 formData.append('description', description);
-                formData.append('file', file);
-                formData.append('hasMobileVersion', mobileToggle ? '1' : '0');
+                
+                if (file) formData.append('file', file);
                 if (mobileFile) formData.append('mobileFile', mobileFile);
                 if (previewFile) formData.append('preview', previewFile);
+
+                const filesInfo = [];
+                if (file) filesInfo.push('EXE');
+                if (mobileFile) filesInfo.push('APK');
 
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
 
@@ -641,12 +646,11 @@
                                 document.getElementById('fileInfo').classList.remove('show');
                                 document.getElementById('mobileFileInfo').classList.remove('show');
                                 document.getElementById('previewThumb').classList.remove('show');
-                                document.getElementById('mobileVersionSection').style.display = 'none';
-                                document.getElementById('mobileVersionToggle').checked = false;
                                 progressBar.classList.remove('show');
                                 progressFill.style.width = '0%';
                                 progressFill.textContent = '0%';
-                                showNotification('✅ Файл(ы) загружены успешно!', 'success');
+                                updateFileValidation();
+                                showNotification(`✅ Файл(ы) загружены успешно! (${filesInfo.join(' + ')})`, 'success');
                                 setTimeout(() => loadAdminProjects(), 1000);
                             } else {
                                 throw new Error(result.error || 'Ошибка сохранения');

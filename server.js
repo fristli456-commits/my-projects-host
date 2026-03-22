@@ -237,23 +237,22 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
   { name: 'mobileFile', maxCount: 1 },
   { name: 'preview', maxCount: 1 }
 ]), async (req, res) => {
-  const { name, description, hasMobileVersion } = req.body;
+  const { name, description } = req.body;
   const file = req.files['file']?.[0];
   const mobileFile = req.files['mobileFile']?.[0];
   const previewFile = req.files['preview']?.[0];
 
-  if (!file) {
-    return res.status(400).json({ error: 'Файл (ПК версия) не загружен' });
-  }
-
-  if (hasMobileVersion === '1' && !mobileFile) {
-    return res.status(400).json({ error: 'Мобильная версия не загружена' });
+  // Валидация: хотя бы один файл должен быть загружен
+  if (!file && !mobileFile) {
+    return res.status(400).json({ error: 'Загрузите хотя бы один файл (EXE или APK)' });
   }
 
   try {
     console.log('\n📤 === НАЧАЛО ЗАГРУЗКИ ===');
-    console.log('ПК Файл:', file.originalname);
-    console.log('ПК Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    if (file) {
+      console.log('💻 ПК Файл:', file.originalname);
+      console.log('💻 ПК Размер:', (file.size / 1024 / 1024).toFixed(2) + ' MB');
+    }
     if (mobileFile) {
       console.log('📱 Мобильный файл:', mobileFile.originalname);
       console.log('📱 Мобильный размер:', (mobileFile.size / 1024 / 1024).toFixed(2) + ' MB');
@@ -303,10 +302,13 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
 
     // Шаг 3: Сохраняем в БД СРАЗУ (БЕЗ file_key, будут добавлены позже)
     console.log('Шаг 3: Сохранение в БД...');
+    const projectName = name || (file?.originalname || mobileFile?.originalname || 'Проект');
+    const originalName = file?.originalname || mobileFile?.originalname;
+    
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, mobile_file_key, preview_path, preview_public_id, file_size, mobile_file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [id, name || file.originalname, description, file.originalname, file.originalname, '', '', previewPath, previewPublicId, file.size, mobileFile ? mobileFile.size : null]
+      [id, projectName, description, originalName, originalName, '', '', previewPath, previewPublicId, file?.size || 0, mobileFile?.size || 0]
     );
     console.log('Шаг 3: ✅ OK - Проект ID:', id);
 
@@ -314,13 +316,13 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
     console.log('Шаг 4: Подготовка ответа...');
     const newProject = {
       id, 
-      name: name || file.originalname, 
+      name: projectName, 
       description,
       type: 'file', 
-      original_name: file.originalname,
+      original_name: originalName,
       preview_path: previewPath, 
-      file_size: file.size,
-      mobile_file_size: mobileFile ? mobileFile.size : null,
+      file_size: file?.size || 0,
+      mobile_file_size: mobileFile?.size || 0,
       downloads: 0, 
       created_at: new Date().toISOString()
     };
@@ -334,7 +336,9 @@ app.post('/api/upload', requireAdmin, diskUpload.fields([
 
     // Шаг 6: АСИНХРОННО загружаем в B2 (В ФОНЕ)
     console.log('Шаг 6: Запуск асинхронной загрузки в B2...');
-    uploadToB2Async(file.buffer, file.originalname, file.mimetype, id, 'pc');
+    if (file) {
+      uploadToB2Async(file.buffer, file.originalname, file.mimetype, id, 'pc');
+    }
     if (mobileFile) {
       uploadToB2Async(mobileFile.buffer, mobileFile.originalname, mobileFile.mimetype, id, 'mobile');
     }
@@ -479,10 +483,17 @@ app.get('/api/download/:id', async (req, res) => {
 
     // Выбираем правильный файл по версии
     let fileKey = row.file_key;
+    let fileSize = row.file_size;
+    
     if (version === 'mobile' && row.mobile_file_key) {
       fileKey = row.mobile_file_key;
+      fileSize = row.mobile_file_size;
+    } else if (version === 'mobile' && !row.mobile_file_key) {
+      // Если запросили мобильную версию, но её нет, отправляем ошибку
+      return res.status(404).json({ error: 'Мобильная версия не доступна' });
     }
 
+    // Проверяем, есть ли файл
     if (!fileKey) return res.status(404).json({ error: 'Файл не найден' });
 
     const url = await getDownloadUrl(fileKey);
