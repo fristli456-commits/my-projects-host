@@ -34,7 +34,6 @@ const s3 = new S3Client({
     accessKeyId: process.env.B2_KEY_ID,
     secretAccessKey: process.env.B2_APPLICATION_KEY,
   },
-  maxAttempts: 3,
 });
 
 const B2_BUCKET = process.env.B2_BUCKET_NAME || 'my-projects-files';
@@ -43,14 +42,11 @@ const B2_BUCKET = process.env.B2_BUCKET_NAME || 'my-projects-files';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 10000,
-  idleTimeoutMillis: 30000,
 });
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json());
 app.use(express.static('public'));
 
 app.use(session({
@@ -60,71 +56,57 @@ app.use(session({
   cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
-
 // Multer — храним в памяти
 const memoryUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 * 1024 } // 2GB лимит
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB лимит
 });
 
 // Инициализация БД
 async function initDB() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        is_admin INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        type TEXT CHECK(type IN ('file', 'link')),
-        filename TEXT,
-        original_name TEXT,
-        file_key TEXT,
-        link_url TEXT,
-        preview_path TEXT,
-        preview_public_id TEXT,
-        file_size INTEGER,
-        downloads INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      type TEXT CHECK(type IN ('file', 'link')),
+      filename TEXT,
+      original_name TEXT,
+      file_key TEXT,
+      link_url TEXT,
+      preview_path TEXT,
+      preview_public_id TEXT,
+      file_size INTEGER,
+      downloads INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-    await createDefaultAdmin();
-    console.log('✅ База данных готова');
-  } catch (err) {
-    console.error('❌ Ошибка инициализации БД:', err);
-    throw err;
-  }
+  await createDefaultAdmin();
+  console.log('✅ База данных готова');
 }
 
 async function createDefaultAdmin() {
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', ['Fristli']);
-    if (result.rows.length === 0) {
-      const password = process.env.ADMIN_PASSWORD || 'admin123';
-      const hash = await bcrypt.hash(password, 10);
-      await pool.query(
-        'INSERT INTO users (id, username, password_hash, is_admin) VALUES ($1, $2, $3, 1)',
-        [uuidv4(), 'Fristli', hash]
-      );
-      console.log('✅ Админ Fristli создан');
-    }
-  } catch (err) {
-    console.error('❌ Ошибка создания админа:', err);
+  const result = await pool.query('SELECT * FROM users WHERE username = $1', ['Fristli']);
+  if (result.rows.length === 0) {
+    const password = process.env.ADMIN_PASSWORD || 'admin123';
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query(
+      'INSERT INTO users (id, username, password_hash, is_admin) VALUES ($1, $2, $3, 1)',
+      [uuidv4(), 'Fristli', hash]
+    );
+    console.log('✅ Админ Fristli создан');
   }
 }
 
@@ -139,64 +121,15 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Загрузить файл в B2 (с chunked upload для больших файлов)
+// Загрузить файл в B2
 async function uploadToB2(buffer, originalName, mimetype) {
   const key = `uploads/${uuidv4()}-${originalName}`;
-  
-  // Для больших файлов используем multipart upload
-  const chunkSize = 5 * 1024 * 1024; // 5MB чанки
-  const totalSize = buffer.length;
-  
-  if (totalSize > chunkSize) {
-    // Multipart upload для файлов > 5MB
-    const { CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } = require('@aws-sdk/client-s3');
-    
-    const createRes = await s3.send(new CreateMultipartUploadCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      ContentType: mimetype,
-    }));
-    
-    const uploadId = createRes.UploadId;
-    const parts = [];
-    let partNumber = 1;
-    
-    for (let offset = 0; offset < totalSize; offset += chunkSize) {
-      const chunk = buffer.slice(offset, Math.min(offset + chunkSize, totalSize));
-      const partRes = await s3.send(new UploadPartCommand({
-        Bucket: B2_BUCKET,
-        Key: key,
-        UploadId: uploadId,
-        PartNumber: partNumber,
-        Body: chunk,
-      }));
-      
-      parts.push({
-        ETag: partRes.ETag,
-        PartNumber: partNumber,
-      });
-      
-      console.log(`Загружен чанк ${partNumber}/${Math.ceil(totalSize/chunkSize)}`);
-      partNumber++;
-    }
-    
-    await s3.send(new CompleteMultipartUploadCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      UploadId: uploadId,
-      MultipartUpload: { Parts: parts },
-    }));
-    
-  } else {
-    // Обычная загрузка для маленьких файлов
-    await s3.send(new PutObjectCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      Body: buffer,
-      ContentType: mimetype,
-    }));
-  }
-  
+  await s3.send(new PutObjectCommand({
+    Bucket: B2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: mimetype,
+  }));
   return key;
 }
 
@@ -232,7 +165,6 @@ app.post('/api/register', async (req, res) => {
     res.json({ success: true, message: 'Регистрация успешна' });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Никнейм уже занят' });
-    console.error('Ошибка регистрации:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -254,7 +186,6 @@ app.post('/api/login', async (req, res) => {
 
     res.json({ success: true, user: { username: user.username, isAdmin: user.is_admin === 1 } });
   } catch (err) {
-    console.error('Ошибка входа:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -277,44 +208,39 @@ app.get('/api/projects', async (req, res) => {
     const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error('Ошибка получения проектов:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Получить presigned URL для прямой загрузки в B2 (для больших файлов)
-app.post('/api/presigned-url', requireAdmin, async (req, res) => {
-  const { filename, contentType } = req.body;
-  const key = `uploads/${uuidv4()}-${filename}`;
-  
-  try {
-    const command = new PutObjectCommand({
-      Bucket: B2_BUCKET,
-      Key: key,
-      ContentType: contentType,
-    });
-    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    res.json({ url, key });
-  } catch (err) {
-    console.error('Ошибка presigned URL:', err);
-    res.status(500).json({ error: err.message });
+// ЗАГРУЗКА ФАЙЛА (через сервер - без CORS проблем)
+app.post('/api/upload', requireAdmin, memoryUpload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'preview', maxCount: 1 }
+]), async (req, res) => {
+  const { name, description } = req.body;
+  const file = req.files['file']?.[0];
+  const previewFile = req.files['preview']?.[0];
+
+  if (!file) {
+    return res.status(400).json({ error: 'Файл не загружен' });
   }
-});
-
-// Сохранить проект после загрузки в B2
-app.post('/api/save-project', requireAdmin, memoryUpload.single('preview'), async (req, res) => {
-  const { name, description, fileKey, originalName, fileSize } = req.body;
-
-  let previewPath = null;
-  let previewPublicId = null;
 
   try {
-    if (req.file) {
+    console.log('Загрузка файла:', file.originalname, 'Размер:', file.size);
+    
+    // Загружаем основной файл в B2
+    const fileKey = await uploadToB2(file.buffer, file.originalname, file.mimetype);
+    console.log('Файл загружен в B2:', fileKey);
+
+    // Загружаем превью в Cloudinary если есть
+    let previewPath = null;
+    let previewPublicId = null;
+    if (previewFile) {
       const uploaded = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_stream(
           { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
           (err, result) => err ? reject(err) : resolve(result)
-        ).end(req.file.buffer);
+        ).end(previewFile.buffer);
       });
       previewPath = uploaded.secure_url;
       previewPublicId = uploaded.public_id;
@@ -324,20 +250,20 @@ app.post('/api/save-project', requireAdmin, memoryUpload.single('preview'), asyn
     await pool.query(
       `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
        VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
-      [id, name || originalName, description, originalName, originalName, fileKey, previewPath, previewPublicId, parseInt(fileSize)]
+      [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
     );
 
     const newProject = {
-      id, name: name || originalName, description,
-      type: 'file', original_name: originalName,
-      preview_path: previewPath, file_size: parseInt(fileSize),
+      id, name: name || file.originalname, description,
+      type: 'file', original_name: file.originalname,
+      preview_path: previewPath, file_size: file.size,
       downloads: 0, created_at: new Date().toISOString()
     };
 
     io.emit('new_project', newProject);
     res.json({ success: true, project: newProject });
   } catch (err) {
-    console.error('Ошибка save-project:', err);
+    console.error('Ошибка upload:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -373,7 +299,6 @@ app.post('/api/link', requireAdmin, memoryUpload.single('preview'), async (req, 
     io.emit('new_project', newProject);
     res.json({ success: true, project: newProject });
   } catch (err) {
-    console.error('Ошибка добавления ссылки:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -420,7 +345,6 @@ app.put('/api/projects/:id', requireAdmin, memoryUpload.single('preview'), async
     io.emit('update_project', { id, name, description, url, preview_path: previewPath });
     res.json({ success: true });
   } catch (err) {
-    console.error('Ошибка редактирования:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -441,7 +365,6 @@ app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     io.emit('delete_project', { id });
     res.json({ success: true });
   } catch (err) {
-    console.error('Ошибка удаления:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -462,7 +385,6 @@ app.get('/api/download/:id', async (req, res) => {
     const url = await getDownloadUrl(row.file_key);
     res.redirect(url);
   } catch (err) {
-    console.error('Ошибка скачивания:', err);
     res.status(500).json({ error: err.message });
   }
 });
