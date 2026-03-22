@@ -54,8 +54,9 @@ const fileStorage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => ({
     folder: file.fieldname === 'preview' ? 'previews' : 'uploads',
-    resource_type: 'auto',
+    resource_type: 'raw', // ← было 'auto', меняем на 'raw'
     public_id: uuidv4(),
+    format: path.extname(file.originalname).slice(1) || undefined,
   }),
 });
 
@@ -193,6 +194,7 @@ app.get('/api/projects', async (req, res) => {
     const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
+    console.error('Ошибка загрузки:', JSON.stringify(err));
     res.status(500).json({ error: err.message });
   }
 });
