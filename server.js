@@ -118,12 +118,13 @@ async function createDefaultAdmin() {
   });
 
   if (!adminExists) {
-    const hash = await bcrypt.hash('admin123', 10);
+    const password = process.env.ADMIN_PASSWORD || 'admin123';
+    const hash = await bcrypt.hash(password, 10);
     db.run(
       'INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, 1)',
       [uuidv4(), 'Fristli', hash]
     );
-    console.log('✅ Админ Fristli создан (пароль: admin123)');
+    console.log('✅ Админ Fristli создан');
   }
 }
 
