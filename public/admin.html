@@ -4,74 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель управления</title>
-    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ЧЁРНО-КРАСНАЯ ТЕМА */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
             min-height: 100vh;
             color: #e0e0e0;
-            line-height: 1.6;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-        /* Header */
         .header-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 15px;
-            margin-bottom: 10px;
         }
 
-        header h1 {
+        h1 {
             font-size: 2.2rem;
             color: #ff3333;
-            margin: 0;
             text-shadow: 0 0 20px rgba(255, 51, 51, 0.3);
         }
 
-        header p {
-            color: #888;
-            font-size: 1.1rem;
-        }
-
-        /* Кнопка "На сайт" */
-        .back-link-btn {
-            color: #ff6666;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            padding: 10px 20px;
-            border-radius: 10px;
-            transition: all 0.3s;
-            background: rgba(255, 51, 51, 0.1);
-            border: 2px solid rgba(255, 51, 51, 0.3);
-            font-size: 1rem;
-            margin-top: 15px;
-            font-weight: 600;
-        }
-
-        .back-link-btn:hover {
-            background: rgba(255, 51, 51, 0.2);
-            border-color: #ff3333;
-            color: #ff3333;
-            transform: translateX(-5px);
-        }
-
-        /* Buttons */
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 51, 51, 0.1);
             border: 2px solid rgba(255, 51, 51, 0.4);
             color: #ff6666;
             padding: 10px 20px;
@@ -86,39 +47,52 @@
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 51, 51, 0.15);
+            background: rgba(255, 51, 51, 0.2);
             border-color: #ff3333;
-            color: #ff3333;
         }
 
-        /* Upload sections */
+        .back-link-btn {
+            color: #ff6666;
+            background: rgba(255, 51, 51, 0.1);
+            border: 2px solid rgba(255, 51, 51, 0.3);
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-link-btn:hover {
+            background: rgba(255, 51, 51, 0.2);
+            transform: translateX(-5px);
+        }
+
         .upload-section {
             background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
             border-radius: 20px;
             padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            margin: 30px 0;
             border: 1px solid rgba(255, 51, 51, 0.1);
         }
 
         .upload-section h2 {
-            margin-bottom: 25px;
             color: #ff3333;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
-            font-size: 1.4rem;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
 
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 600;
             color: #b0b0b0;
+            font-weight: 600;
         }
 
         .form-row {
@@ -127,79 +101,26 @@
             gap: 20px;
         }
 
-        .required {
-            color: #ff3333;
-        }
-
         input, textarea {
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #333;
             border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s;
-            font-family: inherit;
             background: #1a1a1a;
             color: #e0e0e0;
+            font-size: 1rem;
         }
 
         input:focus, textarea:focus {
             outline: none;
             border-color: #ff3333;
-            box-shadow: 0 0 0 3px rgba(255, 51, 51, 0.1);
         }
 
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
+        textarea { min-height: 100px; resize: vertical; }
 
         input[type="file"] {
             padding: 10px;
             border: 2px dashed #444;
-            background: #1a1a1a;
-            cursor: pointer;
-            color: #888;
-        }
-
-        input[type="file"]:hover {
-            border-color: #ff3333;
-            background: #252525;
-        }
-
-        .file-info {
-            margin-top: 10px;
-            padding: 12px;
-            background: #1a1a1a;
-            border-radius: 8px;
-            border-left: 4px solid #ff3333;
-            display: none;
-            font-size: 0.9rem;
-            color: #b0b0b0;
-        }
-
-        .file-info.show {
-            display: block;
-        }
-
-        .preview-thumb {
-            margin-top: 10px;
-            width: 100px;
-            height: 100px;
-            border-radius: 10px;
-            overflow: hidden;
-            display: none;
-            border: 2px solid #333;
-        }
-
-        .preview-thumb.show {
-            display: block;
-        }
-
-        .preview-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
         }
 
         button[type="submit"] {
@@ -211,13 +132,11 @@
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
             width: 100%;
+            display: flex;
+            align-items: center;
             justify-content: center;
-            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.3);
+            gap: 10px;
         }
 
         button[type="submit"]:hover {
@@ -225,14 +144,62 @@
             box-shadow: 0 8px 30px rgba(255, 51, 51, 0.5);
         }
 
-        /* Projects list */
-        .projects-list h2 {
-            color: #ff3333;
-            margin-bottom: 20px;
+        button[type="submit"]:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .progress-bar.show { display: block; }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff3333, #cc0000);
+            width: 0%;
+            transition: width 0.3s;
             display: flex;
             align-items: center;
-            gap: 10px;
-            text-shadow: 0 0 10px rgba(255, 51, 51, 0.2);
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .file-info {
+            margin-top: 10px;
+            padding: 12px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            border-left: 4px solid #ff3333;
+            display: none;
+        }
+
+        .file-info.show { display: block; }
+
+        .preview-thumb {
+            margin-top: 10px;
+            width: 100px;
+            height: 100px;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+            border: 2px solid #333;
+        }
+
+        .preview-thumb.show { display: block; }
+
+        .preview-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .admin-project-card {
@@ -240,15 +207,7 @@
             border-radius: 15px;
             padding: 20px;
             margin-bottom: 15px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
             border: 1px solid rgba(255, 51, 51, 0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .admin-project-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(255, 51, 51, 0.15);
-            border-color: rgba(255, 51, 51, 0.2);
         }
 
         .admin-project-header {
@@ -261,16 +220,14 @@
             width: 80px;
             height: 80px;
             border-radius: 12px;
-            object-fit: cover;
             background: #1a1a1a;
-            flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #555;
             font-size: 2rem;
-            border: 2px solid #333;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .admin-project-preview img {
@@ -279,13 +236,11 @@
             object-fit: cover;
         }
 
-        .admin-project-info {
-            flex: 1;
-        }
+        .admin-project-info { flex: 1; }
 
         .admin-project-info h3 {
-            margin-bottom: 5px;
             color: #e0e0e0;
+            margin-bottom: 5px;
         }
 
         .admin-project-info p {
@@ -316,17 +271,9 @@
             padding: 8px 16px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.3s;
         }
 
-        .btn-edit:hover {
-            background: #ff3333;
-            transform: scale(1.05);
-        }
+        .btn-edit:hover { background: #ff3333; }
 
         .btn-delete {
             background: #742a2a;
@@ -335,167 +282,59 @@
             padding: 8px 16px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.3s;
         }
 
-        .btn-delete:hover {
-            background: #c53030;
-            transform: scale(1.05);
-        }
+        .btn-delete:hover { background: #c53030; }
 
-        /* Modal */
         .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(5px);
-            animation: fadeIn 0.3s;
-        }
-
-        .modal.show {
-            display: flex;
+            z-index: 1000;
             align-items: center;
             justify-content: center;
         }
+
+        .modal.show { display: flex; }
 
         .modal-content {
             background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
             padding: 30px;
             border-radius: 20px;
             width: 90%;
-            max-width: 500px;
-            position: relative;
-            animation: slideUp 0.3s;
+            max-width: 700px;
             max-height: 90vh;
             overflow-y: auto;
             border: 1px solid rgba(255, 51, 51, 0.2);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-        }
-
-        .modal-large {
-            max-width: 700px;
         }
 
         .close {
-            position: absolute;
-            right: 20px;
-            top: 15px;
+            float: right;
             font-size: 28px;
             cursor: pointer;
             color: #666;
-            transition: color 0.3s;
         }
 
-        .close:hover {
-            color: #ff3333;
-        }
-
-        .modal h2 {
-            margin-bottom: 20px;
-            color: #ff3333;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .current-preview {
-            width: 150px;
-            height: 150px;
-            border-radius: 12px;
-            overflow: hidden;
-            background: #1a1a1a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #555;
-            border: 2px dashed #444;
-        }
-
-        .current-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        /* Utilities */
-        .loading {
-            text-align: center;
-            color: #ff6666;
-            font-size: 1.2rem;
-            padding: 60px;
-        }
-
-        .empty {
-            text-align: center;
-            color: #666;
-            padding: 60px;
-            font-size: 1.1rem;
-        }
+        .close:hover { color: #ff3333; }
 
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 20px; right: 20px;
             padding: 15px 25px;
             border-radius: 12px;
             color: white;
             font-weight: 600;
             z-index: 2000;
-            animation: slideInRight 0.3s;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
         }
 
         .notification.success { background: #276749; }
         .notification.error { background: #c53030; }
 
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* Mobile */
         @media (max-width: 768px) {
-            .header-top {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            header h1 {
-                font-size: 1.8rem;
-            }
-            
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
-            .admin-project-header {
-                flex-direction: column;
-            }
-            
-            .admin-project-preview {
-                width: 100%;
-                height: 150px;
-            }
+            .form-row { grid-template-columns: 1fr; }
+            .admin-project-header { flex-direction: column; }
         }
     </style>
 </head>
@@ -504,49 +343,52 @@
         <header>
             <div class="header-top">
                 <h1><i class="fas fa-cog"></i> Панель управления</h1>
-                <div id="adminAuthSection">
-                    <!-- Здесь будет имя пользователя и кнопки -->
-                </div>
+                <div id="adminAuthSection"></div>
             </div>
             <button onclick="goToSite()" class="back-link-btn">
-    <i class="fas fa-arrow-left"></i> На сайт
-</button>
+                <i class="fas fa-arrow-left"></i> На сайт
+            </button>
         </header>
 
         <div class="upload-section">
             <h2><i class="fas fa-upload"></i> Добавить файл</h2>
-            <form id="uploadForm" enctype="multipart/form-data">
+            <form id="uploadForm">
                 <div class="form-group">
                     <label>Название проекта</label>
-                    <input type="text" name="name" placeholder="Например: Мой Супер-App" required>
+                    <input type="text" id="fileName" placeholder="Например: Мой Супер-App" required>
                 </div>
                 
                 <div class="form-group">
                     <label>Описание</label>
-                    <textarea name="description" placeholder="Описание функций..."></textarea>
+                    <textarea id="fileDescription" placeholder="Описание функций..."></textarea>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Файл приложения <span class="required">*</span></label>
-                        <input type="file" name="file" id="fileInput" required>
+                        <label>Файл приложения *</label>
+                        <input type="file" id="fileInput" required>
                         <div class="file-info" id="fileInfo"></div>
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill">0%</div>
+                        </div>
                     </div>
                     
                     <div class="form-group">
                         <label>Превью (скриншот/иконка)</label>
-                        <input type="file" name="preview" id="previewInput" accept="image/*">
+                        <input type="file" id="previewInput" accept="image/*">
                         <div class="preview-thumb" id="previewThumb"></div>
                     </div>
                 </div>
 
-                <button type="submit"><i class="fas fa-upload"></i> Загрузить файл</button>
+                <button type="submit" id="submitBtn">
+                    <i class="fas fa-upload"></i> Загрузить файл
+                </button>
             </form>
         </div>
 
         <div class="upload-section">
             <h2><i class="fas fa-link"></i> Добавить ссылку</h2>
-            <form id="linkForm" enctype="multipart/form-data">
+            <form id="linkForm">
                 <div class="form-group">
                     <label>Название</label>
                     <input type="text" name="name" placeholder="Название проекта" required>
@@ -559,7 +401,7 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>URL ссылки <span class="required">*</span></label>
+                        <label>URL ссылки *</label>
                         <input type="url" name="url" placeholder="https://example.com" required>
                     </div>
                     
@@ -569,24 +411,29 @@
                     </div>
                 </div>
 
-                <button type="submit"><i class="fas fa-plus"></i> Добавить ссылку</button>
+                <button type="submit">
+                    <i class="fas fa-plus"></i> Добавить ссылку
+                </button>
             </form>
         </div>
 
-        <div class="projects-list">
-            <h2><i class="fas fa-list"></i> Все проекты</h2>
+        <div>
+            <h2 style="color: #ff3333; margin-bottom: 20px;">
+                <i class="fas fa-list"></i> Все проекты
+            </h2>
             <div id="adminProjectsList">
-                <div class="loading">Загрузка...</div>
+                <div style="text-align: center; color: #666; padding: 40px;">Загрузка...</div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно редактирования -->
     <div id="editModal" class="modal">
-        <div class="modal-content modal-large">
+        <div class="modal-content">
             <span class="close" onclick="closeEditModal()">&times;</span>
-            <h2><i class="fas fa-edit"></i> Редактировать проект</h2>
-            <form id="editForm" enctype="multipart/form-data">
+            <h2 style="color: #ff3333; margin-bottom: 20px;">
+                <i class="fas fa-edit"></i> Редактировать проект
+            </h2>
+            <form id="editForm">
                 <input type="hidden" id="editId">
                 
                 <div class="form-group">
@@ -607,15 +454,17 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Текущее превью</label>
-                        <div id="currentPreview" class="current-preview"></div>
+                        <div id="currentPreview" style="width: 150px; height: 150px; background: #1a1a1a; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #555;"></div>
                     </div>
                     <div class="form-group">
                         <label>Новое превью (заменить)</label>
-                        <input type="file" name="preview" accept="image/*">
+                        <input type="file" id="editPreview" accept="image/*">
                     </div>
                 </div>
 
-                <button type="submit"><i class="fas fa-save"></i> Сохранить изменения</button>
+                <button type="submit">
+                    <i class="fas fa-save"></i> Сохранить изменения
+                </button>
             </form>
         </div>
     </div>
@@ -624,12 +473,10 @@
     <script>
         const socket = io();
 
-        // ПЕРЕХОД НА САЙТ - ГЛАВНАЯ ФУНКЦИЯ
         function goToSite() {
-    window.location.href = '/';
-}
+            window.location.href = '/';
+        }
 
-        // Проверка авторизации
         async function checkAdminAuth() {
             try {
                 const response = await fetch('/api/me');
@@ -641,8 +488,8 @@
                 }
                 
                 document.getElementById('adminAuthSection').innerHTML = `
-                    <span style="color: #ff6666; margin-right: 15px; font-weight: 600;">👑 ${data.username}</span>
-                    <a href="/settings.html" class="btn-secondary" style="margin-right: 10px; text-decoration: none;">
+                    <span style="color: #ff6666; margin-right: 15px;">👑 ${data.username}</span>
+                    <a href="/settings.html" class="btn-secondary" style="margin-right: 10px;">
                         <i class="fas fa-cog"></i> Настройки
                     </a>
                     <button onclick="logout()" class="btn-secondary">
@@ -662,7 +509,7 @@
             });
         }
 
-        // Превью файла
+        // Превью
         document.getElementById('previewInput')?.addEventListener('change', function(e) {
             const file = e.target.files[0];
             const thumb = document.getElementById('previewThumb');
@@ -683,47 +530,105 @@
             const info = document.getElementById('fileInfo');
             
             if (file) {
-                info.innerHTML = `
-                    <strong>📁 ${file.name}</strong><br>
-                    📊 ${formatFileSize(file.size)}<br>
-                    📅 ${file.type || 'Неизвестный тип'}
-                `;
+                const size = formatFileSize(file.size);
+                info.innerHTML = `<strong>📁 ${file.name}</strong><br>📊 ${size}`;
                 info.classList.add('show');
             }
         });
 
-        // Загрузка файла
-        document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
+        // Загрузка файла с прогрессом
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const formData = new FormData(e.target);
-            const button = e.target.querySelector('button[type="submit"]');
-            const originalText = button.innerHTML;
-            
-            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
-            button.disabled = true;
+            const submitBtn = document.getElementById('submitBtn');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const file = document.getElementById('fileInput').files[0];
+            const previewFile = document.getElementById('previewInput').files[0];
+            const name = document.getElementById('fileName').value;
+            const description = document.getElementById('fileDescription').value;
+
+            if (!file) {
+                showNotification('❌ Выберите файл', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            progressBar.classList.add('show');
 
             try {
-                const response = await fetch('/api/upload', {
+                // Шаг 1: Получаем presigned URL
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
+                const urlRes = await fetch('/api/presigned-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filename: file.name, 
+                        contentType: file.type || 'application/octet-stream' 
+                    })
+                });
+                
+                if (!urlRes.ok) throw new Error('Ошибка получения URL');
+                const { url, key } = await urlRes.json();
+
+                // Шаг 2: Загружаем файл в B2 с прогрессом
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', url, true);
+                    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                    
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            progressFill.style.width = percent + '%';
+                            progressFill.textContent = percent + '%';
+                            submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}%`;
+                        }
+                    };
+                    
+                    xhr.onload = () => {
+                        if (xhr.status === 200) resolve();
+                        else reject(new Error('Ошибка загрузки: ' + xhr.status));
+                    };
+                    
+                    xhr.onerror = () => reject(new Error('Ошибка сети'));
+                    xhr.send(file);
+                });
+
+                // Шаг 3: Сохраняем проект
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+                
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('description', description);
+                formData.append('fileKey', key);
+                formData.append('originalName', file.name);
+                formData.append('fileSize', file.size);
+                if (previewFile) formData.append('preview', previewFile);
+
+                const saveRes = await fetch('/api/save-project', {
                     method: 'POST',
                     body: formData
                 });
                 
-                const result = await response.json();
-                
+                const result = await saveRes.json();
+
                 if (result.success) {
-                    e.target.reset();
+                    document.getElementById('uploadForm').reset();
                     document.getElementById('fileInfo').classList.remove('show');
                     document.getElementById('previewThumb').classList.remove('show');
+                    progressBar.classList.remove('show');
+                    progressFill.style.width = '0%';
                     showNotification('✅ Файл загружен успешно!', 'success');
                 } else {
-                    showNotification('❌ ' + result.error, 'error');
+                    throw new Error(result.error || 'Ошибка сохранения');
                 }
             } catch (error) {
-                showNotification('❌ Ошибка загрузки', 'error');
+                console.error('Ошибка:', error);
+                showNotification('❌ ' + error.message, 'error');
             } finally {
-                button.innerHTML = originalText;
-                button.disabled = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-upload"></i> Загрузить файл';
             }
         });
 
@@ -760,7 +665,6 @@
             }
         });
 
-        // Загрузка списка проектов
         async function loadAdminProjects() {
             try {
                 const response = await fetch('/api/projects');
@@ -775,7 +679,7 @@
             const container = document.getElementById('adminProjectsList');
             
             if (projects.length === 0) {
-                container.innerHTML = '<div class="empty">Нет проектов</div>';
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 40px;">Нет проектов</div>';
                 return;
             }
 
@@ -821,7 +725,6 @@
             }).join('');
         }
 
-        // Редактирование
         let editingProject = null;
 
         function editProject(id) {
@@ -845,7 +748,7 @@
                 
                 const previewDiv = document.getElementById('currentPreview');
                 if (project.preview_path) {
-                    previewDiv.innerHTML = `<img src="${project.preview_path}" alt="">`;
+                    previewDiv.innerHTML = `<img src="${project.preview_path}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">`;
                 } else {
                     const icon = project.type === 'file' ? getFileIcon(project.original_name) : 'fa-link';
                     previewDiv.innerHTML = `<i class="fas ${icon}"></i>`;
@@ -871,7 +774,7 @@
             const url = document.getElementById('editUrl').value;
             if (url) formData.append('url', url);
             
-            const previewFile = e.target.querySelector('input[type="file"]').files[0];
+            const previewFile = document.getElementById('editPreview').files[0];
             if (previewFile) formData.append('preview', previewFile);
 
             try {
@@ -893,7 +796,6 @@
             }
         });
 
-        // Удаление
         async function deleteProject(id) {
             if (!confirm('❓ Удалить этот проект?')) return;
 
@@ -911,7 +813,6 @@
             }
         }
 
-        // Утилиты
         function formatFileSize(bytes) {
             if (!bytes) return '0 Bytes';
             const k = 1024;
@@ -956,19 +857,16 @@
             setTimeout(() => div.remove(), 3000);
         }
 
-        // Real-time
         socket.on('new_project', () => loadAdminProjects());
         socket.on('delete_project', () => loadAdminProjects());
         socket.on('update_project', () => loadAdminProjects());
 
-        // Закрытие модалок
         window.onclick = function(event) {
             if (event.target.classList.contains('modal')) {
                 event.target.classList.remove('show');
             }
         }
 
-        // Инициализация
         checkAdminAuth();
     </script>
 </body>

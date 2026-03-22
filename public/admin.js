@@ -1,6 +1,9 @@
 const socket = io();
 
-// Проверка авторизации
+function goToSite() {
+    window.location.href = '/';
+}
+
 async function checkAdminAuth() {
     try {
         const response = await fetch('/api/me');
@@ -12,7 +15,10 @@ async function checkAdminAuth() {
         }
         
         document.getElementById('adminAuthSection').innerHTML = `
-            <span style="color: white; margin-right: 15px;">👑 ${data.username}</span>
+            <span style="color: #ff6666; margin-right: 15px;">👑 ${data.username}</span>
+            <a href="/settings.html" class="btn-secondary" style="margin-right: 10px;">
+                <i class="fas fa-cog"></i> Настройки
+            </a>
             <button onclick="logout()" class="btn-secondary">
                 <i class="fas fa-sign-out-alt"></i> Выйти
             </button>
@@ -30,7 +36,7 @@ function logout() {
     });
 }
 
-// Превью файла
+// Превью
 document.getElementById('previewInput')?.addEventListener('change', function(e) {
     const file = e.target.files[0];
     const thumb = document.getElementById('previewThumb');
@@ -51,67 +57,74 @@ document.getElementById('fileInput')?.addEventListener('change', function(e) {
     const info = document.getElementById('fileInfo');
     
     if (file) {
-        info.innerHTML = `
-            <strong>📁 ${file.name}</strong><br>
-            📊 ${formatFileSize(file.size)}<br>
-            📅 ${file.type || 'Неизвестный тип'}
-        `;
+        const size = formatFileSize(file.size);
+        info.innerHTML = `<strong>📁 ${file.name}</strong><br>📊 ${size}`;
         info.classList.add('show');
     }
 });
 
-// Загрузка файла
-document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
+// Загрузка файла с прогрессом
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const button = e.target.querySelector('button[type="submit"]');
-    const originalText = button.innerHTML;
+    const submitBtn = document.getElementById('submitBtn');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
     const file = document.getElementById('fileInput').files[0];
     const previewFile = document.getElementById('previewInput').files[0];
-    const name = e.target.querySelector('input[name="name"]').value;
-    const description = e.target.querySelector('textarea[name="description"]').value;
+    const name = document.getElementById('fileName').value;
+    const description = document.getElementById('fileDescription').value;
 
     if (!file) {
         showNotification('❌ Выберите файл', 'error');
         return;
     }
 
-    button.disabled = true;
+    submitBtn.disabled = true;
+    progressBar.classList.add('show');
 
     try {
         // Шаг 1: Получаем presigned URL
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
         const urlRes = await fetch('/api/presigned-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream' })
+            body: JSON.stringify({ 
+                filename: file.name, 
+                contentType: file.type || 'application/octet-stream' 
+            })
         });
+        
+        if (!urlRes.ok) throw new Error('Ошибка получения URL');
         const { url, key } = await urlRes.json();
 
-        // Шаг 2: Загружаем файл напрямую в B2 с прогрессом
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка: 0%';
-        
+        // Шаг 2: Загружаем файл в B2 с прогрессом
         await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.open('PUT', url);
+            xhr.open('PUT', url, true);
             xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
             
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
                     const percent = Math.round((e.loaded / e.total) * 100);
-                    const loaded = (e.loaded / 1024 / 1024).toFixed(1);
-                    const total = (e.total / 1024 / 1024).toFixed(1);
-                    button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}% (${loaded} / ${total} МБ)`;
+                    progressFill.style.width = percent + '%';
+                    progressFill.textContent = percent + '%';
+                    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}%`;
                 }
             };
             
-            xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка загрузки: ' + xhr.status));
+            xhr.onload = () => {
+                if (xhr.status === 200) resolve();
+                else reject(new Error('Ошибка загрузки: ' + xhr.status));
+            };
+            
             xhr.onerror = () => reject(new Error('Ошибка сети'));
             xhr.send(file);
         });
 
         // Шаг 3: Сохраняем проект
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+        
         const formData = new FormData();
         formData.append('name', name);
         formData.append('description', description);
@@ -124,21 +137,25 @@ document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
             method: 'POST',
             body: formData
         });
+        
         const result = await saveRes.json();
 
         if (result.success) {
-            e.target.reset();
+            document.getElementById('uploadForm').reset();
             document.getElementById('fileInfo').classList.remove('show');
             document.getElementById('previewThumb').classList.remove('show');
+            progressBar.classList.remove('show');
+            progressFill.style.width = '0%';
             showNotification('✅ Файл загружен успешно!', 'success');
         } else {
-            showNotification('❌ ' + result.error, 'error');
+            throw new Error(result.error || 'Ошибка сохранения');
         }
     } catch (error) {
+        console.error('Ошибка:', error);
         showNotification('❌ ' + error.message, 'error');
     } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-upload"></i> Загрузить файл';
     }
 });
 
@@ -175,7 +192,6 @@ document.getElementById('linkForm')?.addEventListener('submit', async (e) => {
     }
 });
 
-// Загрузка списка проектов
 async function loadAdminProjects() {
     try {
         const response = await fetch('/api/projects');
@@ -190,7 +206,7 @@ function displayAdminProjects(projects) {
     const container = document.getElementById('adminProjectsList');
     
     if (projects.length === 0) {
-        container.innerHTML = '<div class="empty">Нет проектов</div>';
+        container.innerHTML = '<div style="text-align: center; color: #666; padding: 40px;">Нет проектов</div>';
         return;
     }
 
@@ -236,7 +252,6 @@ function displayAdminProjects(projects) {
     }).join('');
 }
 
-// Редактирование
 let editingProject = null;
 
 function editProject(id) {
@@ -250,7 +265,6 @@ function editProject(id) {
         document.getElementById('editName').value = project.name;
         document.getElementById('editDescription').value = project.description || '';
         
-        // URL только для ссылок
         const urlGroup = document.getElementById('editUrlGroup');
         if (project.type === 'link') {
             urlGroup.style.display = 'block';
@@ -259,10 +273,9 @@ function editProject(id) {
             urlGroup.style.display = 'none';
         }
         
-        // Текущее превью
         const previewDiv = document.getElementById('currentPreview');
         if (project.preview_path) {
-            previewDiv.innerHTML = `<img src="${project.preview_path}" alt="">`;
+            previewDiv.innerHTML = `<img src="${project.preview_path}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">`;
         } else {
             const icon = project.type === 'file' ? getFileIcon(project.original_name) : 'fa-link';
             previewDiv.innerHTML = `<i class="fas ${icon}"></i>`;
@@ -288,7 +301,7 @@ document.getElementById('editForm')?.addEventListener('submit', async (e) => {
     const url = document.getElementById('editUrl').value;
     if (url) formData.append('url', url);
     
-    const previewFile = e.target.querySelector('input[type="file"]').files[0];
+    const previewFile = document.getElementById('editPreview').files[0];
     if (previewFile) formData.append('preview', previewFile);
 
     try {
@@ -310,7 +323,6 @@ document.getElementById('editForm')?.addEventListener('submit', async (e) => {
     }
 });
 
-// Удаление
 async function deleteProject(id) {
     if (!confirm('❓ Удалить этот проект?')) return;
 
@@ -328,7 +340,6 @@ async function deleteProject(id) {
     }
 }
 
-// Утилиты
 function formatFileSize(bytes) {
     if (!bytes) return '0 Bytes';
     const k = 1024;
@@ -373,17 +384,14 @@ function showNotification(text, type) {
     setTimeout(() => div.remove(), 3000);
 }
 
-// Real-time
 socket.on('new_project', () => loadAdminProjects());
 socket.on('delete_project', () => loadAdminProjects());
 socket.on('update_project', () => loadAdminProjects());
 
-// Закрытие модалок
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
         event.target.classList.remove('show');
     }
 }
 
-// Инициализация
 checkAdminAuth();
