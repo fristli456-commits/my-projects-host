@@ -670,7 +670,7 @@
                 };
 
                 xhr.open('POST', '/api/upload', true);
-                xhr.timeout = 600000; // 10 минут таймаут
+                xhr.timeout = 3600000; // 1 час таймаут (для файлов до 1GB)
                 xhr.send(formData);
             } catch (error) {
                 console.error('Ошибка:', error);
