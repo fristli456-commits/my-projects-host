@@ -1,7 +1,6 @@
 const express = require('express');
 const multer = require('multer');
 const { Pool } = require('pg');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -10,6 +9,9 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,12 +21,24 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// Cloudinary config
+// Cloudinary (только для превью)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Backblaze B2 (S3-совместимый)
+const s3 = new S3Client({
+  endpoint: `https://${process.env.B2_ENDPOINT}`,
+  region: 'eu-central-003',
+  credentials: {
+    accessKeyId: process.env.B2_KEY_ID,
+    secretAccessKey: process.env.B2_APPLICATION_KEY,
+  },
+});
+
+const B2_BUCKET = process.env.B2_BUCKET_NAME || 'my-projects-files';
 
 // PostgreSQL
 const pool = new Pool({
@@ -49,21 +63,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Cloudinary storage
-const fileStorage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => ({
-    folder: file.fieldname === 'preview' ? 'previews' : 'uploads',
-    resource_type: 'raw', // ← было 'auto', меняем на 'raw'
-    public_id: uuidv4(),
-    format: path.extname(file.originalname).slice(1) || undefined,
-  }),
-});
-
-const upload = multer({
-  storage: fileStorage,
+// Multer — храним в памяти, потом отправляем в B2
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 500 * 1024 * 1024 }
 });
+
+// Cloudinary storage — только для превью
+const previewStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'previews',
+    resource_type: 'auto',
+    public_id: uuidv4(),
+  }),
+});
+const previewUpload = multer({ storage: previewStorage });
 
 // Инициализация БД
 async function initDB() {
@@ -85,8 +100,7 @@ async function initDB() {
       type TEXT CHECK(type IN ('file', 'link')),
       filename TEXT,
       original_name TEXT,
-      file_path TEXT,
-      file_public_id TEXT,
+      file_key TEXT,
       link_url TEXT,
       preview_path TEXT,
       preview_public_id TEXT,
@@ -125,31 +139,49 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Загрузить файл в B2
+async function uploadToB2(buffer, originalName, mimetype) {
+  const key = `uploads/${uuidv4()}-${originalName}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: B2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: mimetype,
+  }));
+  return key;
+}
+
+// Удалить файл из B2
+async function deleteFromB2(key) {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: B2_BUCKET, Key: key }));
+  } catch (err) {
+    console.error('Ошибка удаления из B2:', err.message);
+  }
+}
+
+// Получить подписанную ссылку для скачивания
+async function getDownloadUrl(key) {
+  const command = new GetObjectCommand({ Bucket: B2_BUCKET, Key: key });
+  return getSignedUrl(s3, command, { expiresIn: 3600 });
+}
+
 // ===== API РОУТЫ =====
 
 // Регистрация
 app.post('/api/register', async (req, res) => {
-  console.log('Попытка регистрации:', req.body);
   const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Заполните все поля' });
-  }
-  if (username === 'Fristli') {
-    return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
-  }
+  if (!username || !password) return res.status(400).json({ error: 'Заполните все поля' });
+  if (username === 'Fristli') return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
 
   try {
     const hash = await bcrypt.hash(password, 10);
-    const id = uuidv4();
     await pool.query(
       'INSERT INTO users (id, username, password_hash, is_admin) VALUES ($1, $2, $3, 0)',
-      [id, username, hash]
+      [uuidv4(), username, hash]
     );
-    console.log('Пользователь создан успешно');
     res.json({ success: true, message: 'Регистрация успешна' });
   } catch (err) {
-    console.error('Ошибка SQL:', err);
     if (err.code === '23505') return res.status(400).json({ error: 'Никнейм уже занят' });
     res.status(500).json({ error: 'Ошибка сервера' });
   }
@@ -194,79 +226,102 @@ app.get('/api/projects', async (req, res) => {
     const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error('Ошибка загрузки:', JSON.stringify(err));
     res.status(500).json({ error: err.message });
   }
 });
 
 // Загрузить файл (только админ)
 app.post('/api/upload', requireAdmin, (req, res, next) => {
-  upload.fields([
+  memoryUpload.fields([
     { name: 'file', maxCount: 1 },
     { name: 'preview', maxCount: 1 }
   ])(req, res, (err) => {
     if (err) {
-      console.error('Ошибка multer:', err.message, err);
+      console.error('Ошибка multer:', err.message);
       return res.status(500).json({ error: err.message });
     }
     next();
   });
 }, async (req, res) => {
-  
   const { name, description } = req.body;
   const file = req.files['file']?.[0];
-  const preview = req.files['preview']?.[0];
+  const previewFile = req.files['preview']?.[0];
 
   if (!file) return res.status(400).json({ error: 'Файл не загружен' });
 
-  const id = uuidv4();
-  const previewPath = preview ? preview.path : null;
-  const previewPublicId = preview ? preview.filename : null;
-
   try {
+    // Загружаем основной файл в B2
+    const fileKey = await uploadToB2(file.buffer, file.originalname, file.mimetype);
+
+    // Загружаем превью в Cloudinary если есть
+    let previewPath = null;
+    let previewPublicId = null;
+    if (previewFile) {
+      const uploaded = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+          (err, result) => err ? reject(err) : resolve(result)
+        ).end(previewFile.buffer);
+      });
+      previewPath = uploaded.secure_url;
+      previewPublicId = uploaded.public_id;
+    }
+
+    const id = uuidv4();
     await pool.query(
-      `INSERT INTO projects (id, name, description, type, filename, original_name, file_path, file_public_id, preview_path, preview_public_id, file_size)
-       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10)`,
-      [id, name || file.originalname, description, file.filename, file.originalname, file.path, file.filename, previewPath, previewPublicId, file.size]
+      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, preview_path, preview_public_id, file_size)
+       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9)`,
+      [id, name || file.originalname, description, file.originalname, file.originalname, fileKey, previewPath, previewPublicId, file.size]
     );
 
     const newProject = {
       id, name: name || file.originalname, description,
       type: 'file', original_name: file.originalname,
-      file_path: file.path, preview_path: previewPath,
-      file_size: file.size, downloads: 0,
-      created_at: new Date().toISOString()
+      preview_path: previewPath, file_size: file.size,
+      downloads: 0, created_at: new Date().toISOString()
     };
 
     io.emit('new_project', newProject);
     res.json({ success: true, project: newProject });
   } catch (err) {
-    console.error('Ошибка upload:', JSON.stringify(err, null, 2));
+    console.error('Ошибка upload:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Добавить ссылку (только админ)
-app.post('/api/link', requireAdmin, upload.single('preview'), async (req, res) => {
+app.post('/api/link', requireAdmin, (req, res, next) => {
+  memoryUpload.single('preview')(req, res, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   const { name, description, url } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'Название и URL обязательны' });
 
-  const id = uuidv4();
-  const previewPath = req.file ? req.file.path : null;
-  const previewPublicId = req.file ? req.file.filename : null;
+  let previewPath = null;
+  let previewPublicId = null;
 
   try {
+    if (req.file) {
+      const uploaded = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+          (err, result) => err ? reject(err) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      previewPath = uploaded.secure_url;
+      previewPublicId = uploaded.public_id;
+    }
+
+    const id = uuidv4();
     await pool.query(
       `INSERT INTO projects (id, name, description, type, link_url, preview_path, preview_public_id)
        VALUES ($1, $2, $3, 'link', $4, $5, $6)`,
       [id, name, description, url, previewPath, previewPublicId]
     );
 
-    const newProject = {
-      id, name, description, type: 'link',
-      link_url: url, preview_path: previewPath,
-      downloads: 0, created_at: new Date().toISOString()
-    };
+    const newProject = { id, name, description, type: 'link', link_url: url, preview_path: previewPath, downloads: 0, created_at: new Date().toISOString() };
     io.emit('new_project', newProject);
     res.json({ success: true, project: newProject });
   } catch (err) {
@@ -275,7 +330,12 @@ app.post('/api/link', requireAdmin, upload.single('preview'), async (req, res) =
 });
 
 // Редактировать проект (только админ)
-app.put('/api/projects/:id', requireAdmin, upload.single('preview'), async (req, res) => {
+app.put('/api/projects/:id', requireAdmin, (req, res, next) => {
+  memoryUpload.single('preview')(req, res, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   const { id } = req.params;
   const { name, description, url } = req.body;
 
@@ -291,8 +351,14 @@ app.put('/api/projects/:id', requireAdmin, upload.single('preview'), async (req,
       if (project.preview_public_id) {
         await cloudinary.uploader.destroy(project.preview_public_id);
       }
-      previewPath = req.file.path;
-      previewPublicId = req.file.filename;
+      const uploaded = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+          (err, result) => err ? reject(err) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      previewPath = uploaded.secure_url;
+      previewPublicId = uploaded.public_id;
     }
 
     if (project.type === 'file') {
@@ -323,12 +389,8 @@ app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'Проект не найден' });
 
-    if (row.file_public_id) {
-      await cloudinary.uploader.destroy(row.file_public_id, { resource_type: 'auto' });
-    }
-    if (row.preview_public_id) {
-      await cloudinary.uploader.destroy(row.preview_public_id);
-    }
+    if (row.file_key) await deleteFromB2(row.file_key);
+    if (row.preview_public_id) await cloudinary.uploader.destroy(row.preview_public_id);
 
     await pool.query('DELETE FROM projects WHERE id = $1', [id]);
     io.emit('delete_project', { id });
@@ -338,7 +400,7 @@ app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Скачать файл
+// Скачать файл — генерируем подписанную ссылку B2
 app.get('/api/download/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -350,7 +412,9 @@ app.get('/api/download/:id', async (req, res) => {
     await pool.query('UPDATE projects SET downloads = downloads + 1 WHERE id = $1', [id]);
 
     if (row.type === 'link') return res.redirect(row.link_url);
-    res.redirect(row.file_path);
+
+    const url = await getDownloadUrl(row.file_key);
+    res.redirect(url);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -364,7 +428,6 @@ io.on('connection', (socket) => {
 
 // ===== НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ =====
 
-// Получить информацию о пользователе
 app.get('/api/user/info', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -379,10 +442,8 @@ app.get('/api/user/info', requireAuth, async (req, res) => {
   }
 });
 
-// Смена никнейма
 app.post('/api/user/change-username', requireAuth, async (req, res) => {
   const { newUsername, password } = req.body;
-
   if (!newUsername || !password) return res.status(400).json({ error: 'Заполните все поля' });
   if (newUsername.length < 3 || newUsername.length > 20) return res.status(400).json({ error: 'Ник должен быть от 3 до 20 символов' });
 
@@ -398,10 +459,7 @@ app.post('/api/user/change-username', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Этот никнейм зарезервирован' });
     }
 
-    const existing = await pool.query(
-      'SELECT * FROM users WHERE username = $1 AND id != $2',
-      [newUsername, user.id]
-    );
+    const existing = await pool.query('SELECT * FROM users WHERE username = $1 AND id != $2', [newUsername, user.id]);
     if (existing.rows.length > 0) return res.status(400).json({ error: 'Этот никнейм уже занят' });
 
     await pool.query('UPDATE users SET username = $1 WHERE id = $2', [newUsername, user.id]);
@@ -412,10 +470,8 @@ app.post('/api/user/change-username', requireAuth, async (req, res) => {
   }
 });
 
-// Смена пароля
 app.post('/api/user/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Заполните все поля' });
   if (newPassword.length < 6) return res.status(400).json({ error: 'Новый пароль должен быть минимум 6 символов' });
 
