@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проект</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #ff6666;
+            text-decoration: none;
+            font-size: 1rem;
+            margin-bottom: 30px;
+            transition: color 0.3s;
+        }
+        .back-btn:hover { color: #ff3333; }
+
+        .project-card {
+            background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 51, 51, 0.2);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .project-preview {
+            width: 100%;
+            height: 350px;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5rem;
+            color: #444;
+        }
+
+        .project-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .project-body {
+            padding: 35px;
+        }
+
+        .project-title {
+            font-size: 2rem;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+
+        .project-description {
+            color: #999;
+            font-size: 1.1rem;
+            line-height: 1.7;
+            margin-bottom: 30px;
+        }
+
+        .project-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 35px;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            border: 1px solid #333;
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .meta-label {
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .meta-value {
+            font-size: 1rem;
+            color: #ccc;
+            font-weight: 600;
+        }
+
+        .download-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px 30px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+
+        .download-btn.pc {
+            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+            color: white;
+            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.3);
+        }
+
+        .download-btn.pc:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 51, 51, 0.5);
+        }
+
+        .download-btn.mobile {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            box-shadow: 0 5px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .download-btn.mobile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+        }
+
+        .download-btn.link {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 5px 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .download-btn.link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+        }
+
+        .download-btn.locked {
+            background: #2d3748;
+            color: #718096;
+            cursor: not-allowed;
+        }
+
+        .btn-size {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-left: auto;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 80px;
+            color: #ff6666;
+            font-size: 1.2rem;
+        }
+
+        .error {
+            text-align: center;
+            padding: 80px;
+            color: #fc8181;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            animation: slideIn 0.3s;
+        }
+        .notification.success { background: #276749; }
+        .notification.error { background: #c53030; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @media (max-width: 600px) {
+            .project-preview { height: 220px; }
+            .project-title { font-size: 1.5rem; }
+            .project-body { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-btn">
+            <i class="fas fa-arrow-left"></i> Назад
+        </a>
+        <div id="content">
+            <div class="loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentUser = null;
+        let isGuest = false;
+
+        const params = new URLSearchParams(window.location.search);
+        const projectId = params.get('id');
+
+        if (!projectId) {
+            window.location.href = '/';
+        }
+
+        async function init() {
+            // Проверяем авторизацию
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                if (data.authenticated) {
+                    currentUser = data;
+                } else {
+                    isGuest = true;
+                }
+            } catch (e) {
+                isGuest = true;
+            }
+
+            // Загружаем проект
+            try {
+                const res = await fetch('/api/projects');
+                const projects = await res.json();
+                const project = projects.find(p => p.id === projectId);
+
+                if (!project) {
+                    document.getElementById('content').innerHTML = `
+                        <div class="error">
+                            <i class="fas fa-exclamation-triangle" style="font-size:3rem;margin-bottom:15px;display:block;color:#ff3333"></i>
+                            Проект не найден
+                        </div>`;
+                    return;
+                }
+
+                renderProject(project);
+                document.title = project.name + ' — Мои Проекты';
+            } catch (e) {
+                document.getElementById('content').innerHTML = `<div class="error">Ошибка загрузки</div>`;
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getFileIcon(filename) {
+            if (!filename) return 'fa-file';
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'exe': 'fa-windows', 'apk': 'fa-android', 'ipa': 'fa-apple',
+                'zip': 'fa-file-archive', 'rar': 'fa-file-archive',
+                'pdf': 'fa-file-pdf', 'doc': 'fa-file-word', 'docx': 'fa-file-word',
+                'jpg': 'fa-file-image', 'jpeg': 'fa-file-image', 'png': 'fa-file-image',
+                'mp4': 'fa-file-video', 'mp3': 'fa-file-audio'
+            };
+            return icons[ext] || 'fa-file';
+        }
+
+        function renderProject(project) {
+            const isFile = project.type === 'file';
+            const hasMobile = project.mobile_file_size && project.mobile_file_size > 0;
+            const addedDate = new Date(project.created_at).toLocaleDateString('ru-RU', {
+                day: 'numeric', month: 'long', year: 'numeric'
+            });
+            const updatedDate = new Date(project.updated_at || project.created_at).toLocaleDateString('ru-RU', {
+                day: 'numeric', month: 'long', year: 'numeric'
+            });
+
+            // Превью
+            let previewHtml;
+            if (project.preview_path) {
+                previewHtml = `<img src="${project.preview_path}" alt="${escapeHtml(project.name)}">`;
+            } else {
+                const icon = isFile ? getFileIcon(project.original_name) : 'fa-link';
+                previewHtml = `<i class="fas ${icon}"></i>`;
+            }
+
+            // Кнопки скачивания
+            let downloadHtml = '';
+            if (isGuest) {
+                downloadHtml = `
+                    <a href="/" class="download-btn locked">
+                        <i class="fas fa-lock"></i> Войдите для скачивания
+                    </a>`;
+            } else if (isFile) {
+                if (hasMobile) {
+                    downloadHtml = `
+                        <a href="/api/download/${project.id}?version=pc" class="download-btn pc">
+                            <i class="fas fa-windows"></i> Скачать для ПК
+                            <span class="btn-size">${formatFileSize(project.file_size)}</span>
+                        </a>
+                        <a href="/api/download/${project.id}?version=mobile" class="download-btn mobile">
+                            <i class="fas fa-android"></i> Скачать для телефона
+                            <span class="btn-size">${formatFileSize(project.mobile_file_size)}</span>
+                        </a>`;
+                } else {
+                    downloadHtml = `
+                        <a href="/api/download/${project.id}" class="download-btn pc">
+                            <i class="fas fa-download"></i> Скачать
+                            <span class="btn-size">${formatFileSize(project.file_size)}</span>
+                        </a>`;
+                }
+            } else {
+                downloadHtml = `
+                    <a href="/api/download/${project.id}" class="download-btn link" target="_blank">
+                        <i class="fas fa-external-link-alt"></i> Перейти по ссылке
+                    </a>`;
+            }
+
+            document.getElementById('content').innerHTML = `
+                <div class="project-card">
+                    <div class="project-preview">${previewHtml}</div>
+                    <div class="project-body">
+                        <h1 class="project-title">${escapeHtml(project.name)}</h1>
+                        <p class="project-description">${escapeHtml(project.description || 'Без описания')}</p>
+                        <div class="project-meta">
+                            <div class="meta-item">
+                                <span class="meta-label">Добавлен</span>
+                                <span class="meta-value">${addedDate}</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Обновлён</span>
+                                <span class="meta-value">${updatedDate}</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Скачиваний</span>
+                                <span class="meta-value"><i class="fas fa-download"></i> ${project.downloads || 0}</span>
+                            </div>
+                            ${isFile && project.file_size ? `
+                            <div class="meta-item">
+                                <span class="meta-label">Размер</span>
+                                <span class="meta-value">${formatFileSize(project.file_size)}</span>
+                            </div>` : ''}
+                            ${isFile && project.original_name ? `
+                            <div class="meta-item">
+                                <span class="meta-label">Тип файла</span>
+                                <span class="meta-value">${project.original_name.split('.').pop().toUpperCase()}</span>
+                            </div>` : ''}
+                        </div>
+                        <div class="download-section">
+                            ${downloadHtml}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -695,7 +695,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                     </a>`;
 
                 return `
-                    <div class="project-card">
+    <div class="project-card" onclick="window.location.href='/project.html?id=${project.id}'" style="cursor:pointer;">
                         <div class="project-preview">
                             ${previewHtml}
                         </div>
