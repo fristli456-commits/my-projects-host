@@ -71,12 +71,13 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
     const file = document.getElementById('fileInput').files[0];
+    const mobileFile = document.getElementById('mobileFileInput')?.files[0];
     const previewFile = document.getElementById('previewInput').files[0];
     const name = document.getElementById('fileName').value;
     const description = document.getElementById('fileDescription').value;
 
-    if (!file) {
-        showNotification('❌ Выберите файл', 'error');
+    if (!file && !mobileFile) {
+        showNotification('❌ Выберите хотя бы один файл', 'error');
         return;
     }
 
@@ -84,60 +85,82 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     progressBar.classList.add('show');
 
     try {
-        // Шаг 1: Получаем presigned URL
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка...';
-        const urlRes = await fetch('/api/presigned-url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                filename: file.name, 
-                contentType: file.type || 'application/octet-stream' 
-            })
-        });
-        
-        if (!urlRes.ok) throw new Error('Ошибка получения URL');
-        const { url, key } = await urlRes.json();
+        let fileKey = '';
+        let mobileFileKey = '';
 
-        // Шаг 2: Загружаем файл в B2 с прогрессом
-        await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', url, true);
-            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-            
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    progressFill.style.width = percent + '%';
-                    progressFill.textContent = percent + '%';
-                    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Загрузка: ${percent}%`;
-                }
-            };
-            
-            xhr.onload = () => {
-                if (xhr.status === 200) resolve();
-                else reject(new Error('Ошибка загрузки: ' + xhr.status));
-            };
-            
-            xhr.onerror = () => reject(new Error('Ошибка сети'));
-            xhr.send(file);
-        });
+        // Загружаем ПК файл
+        if (file) {
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Получение URL...';
+            const urlRes = await fetch('/api/presigned-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream', version: 'pc' })
+            });
+            if (!urlRes.ok) throw new Error('Ошибка получения URL');
+            const { url, key } = await urlRes.json();
+            fileKey = key;
 
-        // Шаг 3: Сохраняем проект
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', url, true);
+                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = percent + '%';
+                        progressFill.textContent = percent + '%';
+                        submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ПК: ${percent}%`;
+                    }
+                };
+                xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка: ' + xhr.status));
+                xhr.onerror = () => reject(new Error('Ошибка сети'));
+                xhr.send(file);
+            });
+        }
+
+        // Загружаем мобильный файл
+        if (mobileFile) {
+            progressFill.style.width = '0%';
+            const urlRes = await fetch('/api/presigned-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: mobileFile.name, contentType: mobileFile.type || 'application/octet-stream', version: 'mobile' })
+            });
+            if (!urlRes.ok) throw new Error('Ошибка получения URL (мобильный)');
+            const { url, key } = await urlRes.json();
+            mobileFileKey = key;
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', url, true);
+                xhr.setRequestHeader('Content-Type', mobileFile.type || 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = percent + '%';
+                        progressFill.textContent = percent + '%';
+                        submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 📱: ${percent}%`;
+                    }
+                };
+                xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка: ' + xhr.status));
+                xhr.onerror = () => reject(new Error('Ошибка сети'));
+                xhr.send(mobileFile);
+            });
+        }
+
+        // Сохраняем проект
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
-        
         const formData = new FormData();
         formData.append('name', name);
         formData.append('description', description);
-        formData.append('fileKey', key);
-        formData.append('originalName', file.name);
-        formData.append('fileSize', file.size);
+        formData.append('fileKey', fileKey);
+        formData.append('mobileFileKey', mobileFileKey);
+        formData.append('originalName', file?.name || mobileFile?.name);
+        formData.append('fileSize', file?.size || 0);
+        formData.append('mobileFileSize', mobileFile?.size || 0);
         if (previewFile) formData.append('preview', previewFile);
 
-        const saveRes = await fetch('/api/save-project', {
-            method: 'POST',
-            body: formData
-        });
-        
+        const saveRes = await fetch('/api/save-project', { method: 'POST', body: formData });
         const result = await saveRes.json();
 
         if (result.success) {
@@ -151,7 +174,6 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             throw new Error(result.error || 'Ошибка сохранения');
         }
     } catch (error) {
-        console.error('Ошибка:', error);
         showNotification('❌ ' + error.message, 'error');
     } finally {
         submitBtn.disabled = false;
