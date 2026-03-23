@@ -102,6 +102,11 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  
+  // Миграции для старых таблиц
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS file_key TEXT`);
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mobile_file_key TEXT`);
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mobile_file_size INTEGER`);
 
   await createDefaultAdmin();
   console.log('✅ База данных готова');
