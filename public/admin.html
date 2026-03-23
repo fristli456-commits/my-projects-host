@@ -715,14 +715,16 @@
         });
 
         async function loadAdminProjects() {
-            try {
-                const response = await fetch('/api/projects');
-                const projects = await response.json();
-                displayAdminProjects(projects);
-            } catch (error) {
-                console.error('Ошибка:', error);
-            }
-        }
+    try {
+        const response = await fetch('/api/projects');
+        const projects = await response.json();
+        displayAdminProjects(projects);
+    } catch (error) {
+        console.error('Ошибка:', error);
+        // Повторяем через 3 секунды если сервер недоступен
+        setTimeout(loadAdminProjects, 3000);
+    }
+}
 
         function displayAdminProjects(projects) {
             const container = document.getElementById('adminProjectsList');
