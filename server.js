@@ -507,6 +507,63 @@ app.get('/api/download/:id', async (req, res) => {
   }
 });
 
+// Получить presigned URL для прямой загрузки в B2
+app.post('/api/presigned-url', requireAdmin, async (req, res) => {
+  const { filename, contentType, version } = req.body;
+  const prefix = version === 'mobile' ? 'mobile-' : 'pc-';
+  const key = `uploads/${uuidv4()}-${prefix}${filename}`;
+  try {
+    const command = new PutObjectCommand({
+      Bucket: B2_BUCKET,
+      Key: key,
+      ContentType: contentType,
+    });
+    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    res.json({ url, key });
+  } catch (err) {
+    console.error('Ошибка presigned URL:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Сохранить проект после прямой загрузки в B2
+app.post('/api/save-project', requireAdmin, diskUpload.single('preview'), async (req, res) => {
+  const { name, description, fileKey, mobileFileKey, originalName, fileSize, mobileFileSize } = req.body;
+  let previewPath = null;
+  let previewPublicId = null;
+  try {
+    if (req.file) {
+      const uploaded = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'previews', resource_type: 'auto', public_id: uuidv4() },
+          (err, result) => err ? reject(err) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      previewPath = uploaded.secure_url;
+      previewPublicId = uploaded.public_id;
+    }
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO projects (id, name, description, type, filename, original_name, file_key, mobile_file_key, preview_path, preview_public_id, file_size, mobile_file_size)
+       VALUES ($1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, name || originalName, description, originalName, originalName, fileKey || '', mobileFileKey || '', previewPath, previewPublicId, fileSize || 0, mobileFileSize || 0]
+    );
+    const newProject = {
+      id, name: name || originalName, description,
+      type: 'file', original_name: originalName,
+      file_key: fileKey, mobile_file_key: mobileFileKey,
+      preview_path: previewPath, file_size: fileSize,
+      mobile_file_size: mobileFileSize, downloads: 0,
+      created_at: new Date().toISOString()
+    };
+    io.emit('new_project', newProject);
+    res.json({ success: true, project: newProject });
+  } catch (err) {
+    console.error('Ошибка save-project:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WebSocket
 io.on('connection', (socket) => {
   console.log('Клиент подключился');
