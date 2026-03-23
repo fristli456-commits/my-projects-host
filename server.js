@@ -138,8 +138,7 @@ function requireAdmin(req, res, next) {
 
 // Асинхронная загрузка в B2 (в фоне, не ожидаем)
 async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId, version = 'pc') {
-  setImmediate(async () => {
-    try {
+  try {
       const versionPrefix = version === 'mobile' ? 'mobile-' : 'pc-';
       const key = `uploads/${uuidv4()}-${versionPrefix}${originalName}`;
       
@@ -165,7 +164,6 @@ async function uploadToB2Async(fileBuffer, originalName, mimetype, projectId, ve
     } catch (err) {
       console.error('❌ [ФОНЕ] Ошибка B2:', err.message);
     }
-  });
 }
 
 // Удалить файл из B2
