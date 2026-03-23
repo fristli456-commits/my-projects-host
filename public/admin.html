@@ -590,96 +590,124 @@
         });
 
         // ЗАГРУЗКА ФАЙЛА (через сервер, сервер загружает в B2)
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitBtn');
-            const progressBar = document.getElementById('progressBar');
-            const progressFill = document.getElementById('progressFill');
-            const file = document.getElementById('fileInput').files[0];
-            const mobileFile = document.getElementById('mobileFileInput').files[0];
-            const previewFile = document.getElementById('previewInput').files[0];
-            const name = document.getElementById('fileName')?.value || '';
-            const description = document.getElementById('fileDescription')?.value || '';
+        // ЗАГРУЗКА ФАЙЛА (напрямую в B2)
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const file = document.getElementById('fileInput').files[0];
+    const mobileFile = document.getElementById('mobileFileInput').files[0];
+    const previewFile = document.getElementById('previewInput').files[0];
+    const name = document.getElementById('fileName')?.value || '';
+    const description = document.getElementById('fileDescription')?.value || '';
 
-            // Валидация: хотя бы один файл должен быть выбран
-            if (!file && !mobileFile) {
-                showNotification('❌ Выберите хотя бы один файл (EXE или APK)', 'error');
-                return;
-            }
+    if (!file && !mobileFile) {
+        showNotification('❌ Выберите хотя бы один файл', 'error');
+        return;
+    }
 
-            submitBtn.disabled = true;
-            progressBar.classList.add('show');
+    submitBtn.disabled = true;
+    progressBar.classList.add('show');
 
-            try {
-                const formData = new FormData();
-                formData.append('name', name);
-                formData.append('description', description);
-                
-                if (file) formData.append('file', file);
-                if (mobileFile) formData.append('mobileFile', mobileFile);
-                if (previewFile) formData.append('preview', previewFile);
+    try {
+        let fileKey = '';
+        let mobileFileKey = '';
 
-                const filesInfo = [];
-                if (file) filesInfo.push('EXE');
-                if (mobileFile) filesInfo.push('APK');
+        if (file) {
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Получение URL...';
+            const urlRes = await fetch('/api/presigned-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream', version: 'pc' })
+            });
+            if (!urlRes.ok) throw new Error('Ошибка получения URL');
+            const { url, key } = await urlRes.json();
+            fileKey = key;
 
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
-
+            await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
-                
+                xhr.open('PUT', url, true);
+                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
                         const percent = Math.round((e.loaded / e.total) * 100);
                         progressFill.style.width = percent + '%';
                         progressFill.textContent = percent + '%';
-                        submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percent}%`;
+                        submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 💻 ${percent}%`;
                     }
                 };
+                xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка B2: ' + xhr.status));
+                xhr.onerror = () => reject(new Error('Ошибка сети'));
+                xhr.send(file);
+            });
+        }
 
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        try {
-                            const result = JSON.parse(xhr.responseText);
-                            if (result.success) {
-                                document.getElementById('uploadForm').reset();
-                                document.getElementById('fileInfo').classList.remove('show');
-                                document.getElementById('mobileFileInfo').classList.remove('show');
-                                document.getElementById('previewThumb').classList.remove('show');
-                                progressBar.classList.remove('show');
-                                progressFill.style.width = '0%';
-                                progressFill.textContent = '0%';
-                                updateFileValidation();
-                                showNotification(`✅ Файл(ы) загружены успешно! (${filesInfo.join(' + ')})`, 'success');
-                                setTimeout(() => loadAdminProjects(), 1000);
-                            } else {
-                                throw new Error(result.error || 'Ошибка сохранения');
-                            }
-                        } catch (e) {
-                            throw new Error('Ошибка парсинга ответа: ' + e.message);
-                        }
-                    } else if (xhr.status === 0) {
-                        throw new Error('Таймаут или сервер недоступен');
-                    } else {
-                        throw new Error('Ошибка сервера: ' + xhr.status + ' ' + xhr.statusText);
+        if (mobileFile) {
+            progressFill.style.width = '0%';
+            const urlRes = await fetch('/api/presigned-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: mobileFile.name, contentType: mobileFile.type || 'application/octet-stream', version: 'mobile' })
+            });
+            if (!urlRes.ok) throw new Error('Ошибка получения URL (мобильный)');
+            const { url, key } = await urlRes.json();
+            mobileFileKey = key;
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', url, true);
+                xhr.setRequestHeader('Content-Type', mobileFile.type || 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = percent + '%';
+                        progressFill.textContent = percent + '%';
+                        submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 📱 ${percent}%`;
                     }
                 };
+                xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('Ошибка B2: ' + xhr.status));
+                xhr.onerror = () => reject(new Error('Ошибка сети'));
+                xhr.send(mobileFile);
+            });
+        }
 
-                xhr.ontimeout = () => {
-                    throw new Error('Таймаут загрузки (сервер долго обрабатывает)');
-                };
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('description', description);
+        formData.append('fileKey', fileKey);
+        formData.append('mobileFileKey', mobileFileKey);
+        formData.append('originalName', file?.name || mobileFile?.name);
+        formData.append('fileSize', file?.size || 0);
+        formData.append('mobileFileSize', mobileFile?.size || 0);
+        if (previewFile) formData.append('preview', previewFile);
 
-                xhr.open('POST', '/api/upload', true);
-                xhr.timeout = 3600000; // 1 час таймаут (для файлов до 1GB)
-                xhr.send(formData);
-            } catch (error) {
-                console.error('Ошибка:', error);
-                showNotification('❌ ' + error.message, 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-upload"></i> Загрузить файл';
-            }
-        });
+        const saveRes = await fetch('/api/save-project', { method: 'POST', body: formData });
+        const result = await saveRes.json();
+
+        if (result.success) {
+            document.getElementById('uploadForm').reset();
+            document.getElementById('fileInfo').classList.remove('show');
+            document.getElementById('mobileFileInfo').classList.remove('show');
+            document.getElementById('previewThumb').classList.remove('show');
+            progressBar.classList.remove('show');
+            progressFill.style.width = '0%';
+            progressFill.textContent = '0%';
+            updateFileValidation();
+            showNotification('✅ Файл загружен успешно!', 'success');
+            setTimeout(() => loadAdminProjects(), 1000);
+        } else {
+            throw new Error(result.error || 'Ошибка сохранения');
+        }
+    } catch (error) {
+        showNotification('❌ ' + error.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-upload"></i> Загрузить файл';
+    }
+});
 
         // Добавление ссылки
         document.getElementById('linkForm')?.addEventListener('submit', async (e) => {
