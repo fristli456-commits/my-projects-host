@@ -7,20 +7,21 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
             background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
             min-height: 100vh;
             color: #e0e0e0;
         }
+        .container { max-width: 900px; margin: 0 auto; padding: 30px 20px; }
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 30px 20px;
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
         }
-
         .back-btn {
             display: inline-flex;
             align-items: center;
@@ -28,19 +29,186 @@
             color: #ff6666;
             text-decoration: none;
             font-size: 1rem;
-            margin-bottom: 30px;
             transition: color 0.3s;
         }
         .back-btn:hover { color: #ff3333; }
 
+        /* Downloads button */
+        .dl-manager-btn {
+            position: relative;
+            background: rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,51,51,0.4);
+            color: #ff6666;
+            padding: 10px 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        .dl-manager-btn:hover { background: rgba(255,51,51,0.15); border-color: #ff3333; color: #ff3333; }
+        .dl-badge {
+            background: #ff3333;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 0.7rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+        .dl-badge.show { display: flex; }
+
+        /* Download manager panel */
+        .dl-panel {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 380px;
+            max-height: 500px;
+            background: #1e1e1e;
+            border: 1px solid rgba(255,51,51,0.3);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+            z-index: 9999;
+            overflow: hidden;
+            display: none;
+            flex-direction: column;
+        }
+        .dl-panel.show { display: flex; }
+        .dl-panel-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #252525;
+        }
+        .dl-panel-header h3 { font-size: 1rem; color: #fff; }
+        .dl-panel-close {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .dl-panel-close:hover { color: #fff; }
+        .dl-panel-tabs {
+            display: flex;
+            border-bottom: 1px solid #333;
+        }
+        .dl-tab {
+            flex: 1;
+            padding: 10px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+        .dl-tab.active { color: #ff3333; border-bottom-color: #ff3333; }
+        .dl-panel-body { overflow-y: auto; flex: 1; padding: 10px; }
+
+        /* Download item */
+        .dl-item {
+            background: #252525;
+            border-radius: 10px;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            border: 1px solid #333;
+        }
+        .dl-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .dl-item-name {
+            font-size: 0.9rem;
+            color: #ddd;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 220px;
+        }
+        .dl-item-actions { display: flex; gap: 6px; }
+        .dl-item-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .dl-item-btn.cancel { color: #fc8181; }
+        .dl-item-btn.cancel:hover { background: rgba(252,129,129,0.15); }
+        .dl-item-btn.remove { color: #666; }
+        .dl-item-btn.remove:hover { background: rgba(255,255,255,0.1); color: #999; }
+        .dl-progress-bar {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+        .dl-progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .dl-progress-fill.active { background: linear-gradient(90deg, #ff3333, #ff6666); }
+        .dl-progress-fill.done { background: #48bb78; }
+        .dl-progress-fill.error { background: #fc8181; }
+        .dl-progress-fill.cancelled { background: #666; }
+        .dl-item-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: #666;
+        }
+        .dl-item-status { }
+        .dl-item-status.done { color: #48bb78; }
+        .dl-item-status.error { color: #fc8181; }
+        .dl-item-status.cancelled { color: #666; }
+        .dl-empty {
+            text-align: center;
+            padding: 30px;
+            color: #555;
+            font-size: 0.9rem;
+        }
+        .dl-clear-btn {
+            width: 100%;
+            padding: 10px;
+            background: none;
+            border: 1px solid #333;
+            color: #666;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-top: 5px;
+            transition: all 0.2s;
+        }
+        .dl-clear-btn:hover { border-color: #fc8181; color: #fc8181; }
+
+        /* Project card */
         .project-card {
             background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
             border-radius: 20px;
             overflow: hidden;
-            border: 1px solid rgba(255, 51, 51, 0.2);
+            border: 1px solid rgba(255,51,51,0.2);
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
-
         .project-preview {
             width: 100%;
             height: 350px;
@@ -51,30 +219,10 @@
             font-size: 5rem;
             color: #444;
         }
-
-        .project-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .project-body {
-            padding: 35px;
-        }
-
-        .project-title {
-            font-size: 2rem;
-            color: #fff;
-            margin-bottom: 10px;
-        }
-
-        .project-description {
-            color: #999;
-            font-size: 1.1rem;
-            line-height: 1.7;
-            margin-bottom: 30px;
-        }
-
+        .project-preview img { width: 100%; height: 100%; object-fit: cover; }
+        .project-body { padding: 35px; }
+        .project-title { font-size: 2rem; color: #fff; margin-bottom: 10px; }
+        .project-description { color: #999; font-size: 1.1rem; line-height: 1.7; margin-bottom: 30px; }
         .project-meta {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -85,32 +233,10 @@
             border-radius: 12px;
             border: 1px solid #333;
         }
-
-        .meta-item {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .meta-label {
-            font-size: 0.8rem;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .meta-value {
-            font-size: 1rem;
-            color: #ccc;
-            font-weight: 600;
-        }
-
-        .download-section {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
+        .meta-item { display: flex; flex-direction: column; gap: 4px; }
+        .meta-label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+        .meta-value { font-size: 1rem; color: #ccc; font-weight: 600; }
+        .download-section { display: flex; flex-direction: column; gap: 12px; }
         .download-btn {
             display: flex;
             align-items: center;
@@ -124,66 +250,17 @@
             cursor: pointer;
             border: none;
             transition: all 0.3s;
+            width: 100%;
         }
-
-        .download-btn.pc {
-            background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
-            color: white;
-            box-shadow: 0 5px 20px rgba(255, 51, 51, 0.3);
-        }
-
-        .download-btn.pc:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(255, 51, 51, 0.5);
-        }
-
-        .download-btn.mobile {
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-            color: white;
-            box-shadow: 0 5px 20px rgba(59, 130, 246, 0.3);
-        }
-
-        .download-btn.mobile:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
-        }
-
-        .download-btn.link {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            box-shadow: 0 5px 20px rgba(16, 185, 129, 0.3);
-        }
-
-        .download-btn.link:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
-        }
-
-        .download-btn.locked {
-            background: #2d3748;
-            color: #718096;
-            cursor: not-allowed;
-        }
-
-        .btn-size {
-            font-size: 0.85rem;
-            opacity: 0.8;
-            margin-left: auto;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 80px;
-            color: #ff6666;
-            font-size: 1.2rem;
-        }
-
-        .error {
-            text-align: center;
-            padding: 80px;
-            color: #fc8181;
-        }
-
+        .download-btn.pc { background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%); color: white; box-shadow: 0 5px 20px rgba(255,51,51,0.3); }
+        .download-btn.pc:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255,51,51,0.5); }
+        .download-btn.mobile { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; box-shadow: 0 5px 20px rgba(59,130,246,0.3); }
+        .download-btn.mobile:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(59,130,246,0.5); }
+        .download-btn.link { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
+        .download-btn.locked { background: #2d3748; color: #718096; cursor: not-allowed; }
+        .btn-size { font-size: 0.85rem; opacity: 0.8; margin-left: auto; }
+        .loading { text-align: center; padding: 80px; color: #ff6666; font-size: 1.2rem; }
+        .error { text-align: center; padding: 80px; color: #fc8181; }
         .notification {
             position: fixed;
             top: 20px;
@@ -192,32 +269,45 @@
             border-radius: 12px;
             color: white;
             font-weight: 600;
-            z-index: 10000;
+            z-index: 10001;
             animation: slideIn 0.3s;
         }
         .notification.success { background: #276749; }
         .notification.error { background: #c53030; }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @media (max-width: 600px) {
             .project-preview { height: 220px; }
             .project-title { font-size: 1.5rem; }
             .project-body { padding: 20px; }
+            .dl-panel { width: calc(100vw - 20px); right: 10px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="/" class="back-btn">
-            <i class="fas fa-arrow-left"></i> Назад
-        </a>
+        <div class="page-header">
+            <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Назад</a>
+            <button class="dl-manager-btn" onclick="toggleDlPanel()">
+                <i class="fas fa-download"></i> Загрузки
+                <span class="dl-badge" id="dlBadge">0</span>
+            </button>
+        </div>
         <div id="content">
             <div class="loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>
         </div>
+    </div>
+
+    <!-- Download Manager Panel -->
+    <div class="dl-panel" id="dlPanel">
+        <div class="dl-panel-header">
+            <h3><i class="fas fa-download"></i> Менеджер загрузок</h3>
+            <button class="dl-panel-close" onclick="toggleDlPanel()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="dl-panel-tabs">
+            <button class="dl-tab active" onclick="switchTab('active')">Активные</button>
+            <button class="dl-tab" onclick="switchTab('history')">История</button>
+        </div>
+        <div class="dl-panel-body" id="dlPanelBody"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -225,127 +315,298 @@
         const socket = io();
         let currentUser = null;
         let isGuest = false;
+        let activeDownloads = {}; // id -> { name, controller, loaded, total, status }
+        let currentTab = 'active';
 
         const params = new URLSearchParams(window.location.search);
         const projectId = params.get('id');
+        if (!projectId) window.location.href = '/';
 
-        if (!projectId) {
-            window.location.href = '/';
+        // ===== DOWNLOAD MANAGER =====
+        function toggleDlPanel() {
+            const panel = document.getElementById('dlPanel');
+            panel.classList.toggle('show');
+            if (panel.classList.contains('show')) renderDlPanel();
         }
 
-        async function init() {
-            // Проверяем авторизацию
-            try {
-                const res = await fetch('/api/me');
-                const data = await res.json();
-                if (data.authenticated) {
-                    currentUser = data;
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.dl-tab').forEach((t, i) => {
+                t.classList.toggle('active', (i === 0 && tab === 'active') || (i === 1 && tab === 'history'));
+            });
+            renderDlPanel();
+        }
+
+        function renderDlPanel() {
+            const body = document.getElementById('dlPanelBody');
+            const history = getHistory();
+
+            if (currentTab === 'active') {
+                const active = Object.values(activeDownloads).filter(d => d.status === 'downloading');
+                if (active.length === 0) {
+                    body.innerHTML = '<div class="dl-empty"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:10px;"></i>Нет активных загрузок</div>';
                 } else {
-                    isGuest = true;
+                    body.innerHTML = active.map(d => `
+                        <div class="dl-item" id="dlitem-${d.id}">
+                            <div class="dl-item-header">
+                                <span class="dl-item-name">${d.name}</span>
+                                <div class="dl-item-actions">
+                                    <button class="dl-item-btn cancel" onclick="cancelDownload('${d.id}')">
+                                        <i class="fas fa-times"></i> Отмена
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="dl-progress-bar">
+                                <div class="dl-progress-fill active" id="dlbar-${d.id}" style="width:${d.percent || 0}%"></div>
+                            </div>
+                            <div class="dl-item-meta">
+                                <span id="dlmeta-${d.id}">${formatSize(d.loaded || 0)} / ${d.total ? formatSize(d.total) : '...'}</span>
+                                <span id="dlpct-${d.id}">${d.percent || 0}%</span>
+                            </div>
+                        </div>
+                    `).join('');
                 }
-            } catch (e) {
-                isGuest = true;
+            } else {
+                if (history.length === 0) {
+                    body.innerHTML = '<div class="dl-empty"><i class="fas fa-history" style="font-size:2rem;display:block;margin-bottom:10px;"></i>История пуста</div>';
+                } else {
+                    body.innerHTML = history.slice().reverse().map(d => `
+                        <div class="dl-item">
+                            <div class="dl-item-header">
+                                <span class="dl-item-name">${d.name}</span>
+                                <div class="dl-item-actions">
+                                    <button class="dl-item-btn remove" onclick="removeFromHistory('${d.id}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="dl-progress-bar">
+                                <div class="dl-progress-fill ${d.status}" style="width:100%"></div>
+                            </div>
+                            <div class="dl-item-meta">
+                                <span class="dl-item-status ${d.status}">
+                                    ${d.status === 'done' ? '✅ Завершено' : d.status === 'cancelled' ? '⛔ Отменено' : '❌ Ошибка'}
+                                </span>
+                                <span>${d.size ? formatSize(d.size) : ''} · ${new Date(d.date).toLocaleTimeString('ru-RU')}</span>
+                            </div>
+                        </div>
+                    `).join('') + `<button class="dl-clear-btn" onclick="clearHistory()"><i class="fas fa-trash"></i> Очистить историю</button>`;
+                }
             }
+        }
 
-            // Загружаем проект
+        function updateDlItem(id) {
+            const d = activeDownloads[id];
+            if (!d) return;
+            const bar = document.getElementById(`dlbar-${id}`);
+            const meta = document.getElementById(`dlmeta-${id}`);
+            const pct = document.getElementById(`dlpct-${id}`);
+            if (bar) bar.style.width = (d.percent || 0) + '%';
+            if (meta) meta.textContent = `${formatSize(d.loaded || 0)} / ${d.total ? formatSize(d.total) : '...'}`;
+            if (pct) pct.textContent = (d.percent || 0) + '%';
+            updateBadge();
+        }
+
+        function updateBadge() {
+            const active = Object.values(activeDownloads).filter(d => d.status === 'downloading').length;
+            const badge = document.getElementById('dlBadge');
+            badge.textContent = active;
+            badge.classList.toggle('show', active > 0);
+        }
+
+        function cancelDownload(id) {
+            const d = activeDownloads[id];
+            if (d && d.controller) {
+                d.controller.abort();
+                d.status = 'cancelled';
+                addToHistory({ id: Date.now(), name: d.name, status: 'cancelled', size: d.loaded, date: Date.now() });
+                delete activeDownloads[id];
+                updateBadge();
+                renderDlPanel();
+            }
+        }
+
+        // ===== HISTORY =====
+        function getHistory() {
+            try { return JSON.parse(localStorage.getItem('dl_history') || '[]'); } catch { return []; }
+        }
+        function addToHistory(item) {
+            const h = getHistory();
+            h.push(item);
+            if (h.length > 50) h.shift();
+            localStorage.setItem('dl_history', JSON.stringify(h));
+        }
+        function removeFromHistory(id) {
+            const h = getHistory().filter(d => d.id != id);
+            localStorage.setItem('dl_history', JSON.stringify(h));
+            renderDlPanel();
+        }
+        function clearHistory() {
+            localStorage.removeItem('dl_history');
+            renderDlPanel();
+        }
+
+        // ===== DOWNLOAD WITH PROGRESS =====
+        async function startDownload(projectId, version, fileName, fileSize) {
+            const dlId = Date.now().toString();
+            const controller = new AbortController();
+            const versionLabel = version === 'mobile' ? ' (мобильная)' : version === 'pc' ? ' (ПК)' : '';
+            const name = fileName + versionLabel;
+
+            activeDownloads[dlId] = { id: dlId, name, controller, loaded: 0, total: fileSize, percent: 0, status: 'downloading' };
+            updateBadge();
+
+            // Открываем панель
+            const panel = document.getElementById('dlPanel');
+            panel.classList.add('show');
+            currentTab = 'active';
+            document.querySelectorAll('.dl-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+            renderDlPanel();
+
             try {
-                const res = await fetch('/api/projects');
-                const projects = await res.json();
-                const project = projects.find(p => p.id === projectId);
+                // Получаем presigned URL через сервер
+                const apiUrl = version ? `/api/download/${projectId}?version=${version}` : `/api/download/${projectId}`;
 
-                if (!project) {
-                    document.getElementById('content').innerHTML = `
-                        <div class="error">
-                            <i class="fas fa-exclamation-triangle" style="font-size:3rem;margin-bottom:15px;display:block;color:#ff3333"></i>
-                            Проект не найден
-                        </div>`;
-                    return;
+                // Сначала делаем HEAD-запрос чтобы получить финальный URL (редирект)
+                const headRes = await fetch(apiUrl, { signal: controller.signal, redirect: 'follow' });
+                const finalUrl = headRes.url;
+
+                // Теперь качаем с прогрессом
+                const res = await fetch(finalUrl, { signal: controller.signal });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+
+                const contentLength = res.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength) : fileSize;
+                activeDownloads[dlId].total = total;
+
+                const reader = res.body.getReader();
+                const chunks = [];
+                let loaded = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+                    activeDownloads[dlId].loaded = loaded;
+                    activeDownloads[dlId].percent = total ? Math.round(loaded / total * 100) : 0;
+                    updateDlItem(dlId);
                 }
 
-                renderProject(project);
-                document.title = project.name + ' — Мои Проекты';
-            } catch (e) {
-                document.getElementById('content').innerHTML = `<div class="error">Ошибка загрузки</div>`;
+                // Склеиваем chunks и сохраняем файл
+                const blob = new Blob(chunks);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                addToHistory({ id: dlId, name, status: 'done', size: loaded, date: Date.now() });
+                delete activeDownloads[dlId];
+                updateBadge();
+                renderDlPanel();
+                showNotification('✅ ' + name + ' загружен!', 'success');
+
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                console.error('Ошибка загрузки:', err);
+                addToHistory({ id: dlId, name, status: 'error', size: 0, date: Date.now() });
+                delete activeDownloads[dlId];
+                updateBadge();
+                renderDlPanel();
+                showNotification('❌ Ошибка загрузки: ' + err.message, 'error');
             }
         }
 
-        function formatFileSize(bytes) {
-            if (!bytes) return '0 Bytes';
+        // ===== UTILS =====
+        function formatSize(bytes) {
+            if (!bytes) return '0 B';
             const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const sizes = ['B', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
-
+        function formatFileSize(bytes) { return formatSize(bytes); }
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
-
         function getFileIcon(filename) {
             if (!filename) return 'fa-file';
             const ext = filename.split('.').pop().toLowerCase();
-            const icons = {
-                'exe': 'fa-windows', 'apk': 'fa-android', 'ipa': 'fa-apple',
-                'zip': 'fa-file-archive', 'rar': 'fa-file-archive',
-                'pdf': 'fa-file-pdf', 'doc': 'fa-file-word', 'docx': 'fa-file-word',
-                'jpg': 'fa-file-image', 'jpeg': 'fa-file-image', 'png': 'fa-file-image',
-                'mp4': 'fa-file-video', 'mp3': 'fa-file-audio'
-            };
+            const icons = { 'exe': 'fa-windows', 'apk': 'fa-android', 'ipa': 'fa-apple', 'zip': 'fa-file-archive', 'rar': 'fa-file-archive', 'pdf': 'fa-file-pdf', 'doc': 'fa-file-word', 'docx': 'fa-file-word', 'jpg': 'fa-file-image', 'jpeg': 'fa-file-image', 'png': 'fa-file-image', 'mp4': 'fa-file-video', 'mp3': 'fa-file-audio' };
             return icons[ext] || 'fa-file';
+        }
+        function showNotification(text, type) {
+            const div = document.createElement('div');
+            div.className = `notification ${type}`;
+            div.textContent = text;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        // ===== INIT =====
+        async function init() {
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                if (data.authenticated) currentUser = data;
+                else isGuest = true;
+            } catch { isGuest = true; }
+
+            try {
+                const res = await fetch('/api/projects');
+                const projects = await res.json();
+                const project = projects.find(p => p.id === projectId);
+                if (!project) {
+                    document.getElementById('content').innerHTML = `<div class="error"><i class="fas fa-exclamation-triangle" style="font-size:3rem;display:block;margin-bottom:15px;color:#ff3333"></i>Проект не найден</div>`;
+                    return;
+                }
+                renderProject(project);
+                document.title = project.name + ' — Мои Проекты';
+            } catch {
+                document.getElementById('content').innerHTML = `<div class="error">Ошибка загрузки</div>`;
+            }
         }
 
         function renderProject(project) {
             const isFile = project.type === 'file';
             const hasMobile = project.mobile_file_size && project.mobile_file_size > 0;
-            const addedDate = new Date(project.created_at).toLocaleDateString('ru-RU', {
-                day: 'numeric', month: 'long', year: 'numeric'
-            });
-            const updatedDate = new Date(project.updated_at || project.created_at).toLocaleDateString('ru-RU', {
-                day: 'numeric', month: 'long', year: 'numeric'
-            });
+            const addedDate = new Date(project.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+            const updatedDate = new Date(project.updated_at || project.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
-            // Превью
-            let previewHtml;
-            if (project.preview_path) {
-                previewHtml = `<img src="${project.preview_path}" alt="${escapeHtml(project.name)}">`;
-            } else {
-                const icon = isFile ? getFileIcon(project.original_name) : 'fa-link';
-                previewHtml = `<i class="fas ${icon}"></i>`;
-            }
+            let previewHtml = project.preview_path
+                ? `<img src="${project.preview_path}" alt="${escapeHtml(project.name)}">`
+                : `<i class="fas ${isFile ? getFileIcon(project.original_name) : 'fa-link'}"></i>`;
 
-            // Кнопки скачивания
             let downloadHtml = '';
             if (isGuest) {
-                downloadHtml = `
-                    <a href="/" class="download-btn locked">
-                        <i class="fas fa-lock"></i> Войдите для скачивания
-                    </a>`;
+                downloadHtml = `<button class="download-btn locked"><i class="fas fa-lock"></i> Войдите для скачивания</button>`;
             } else if (isFile) {
                 if (hasMobile) {
                     downloadHtml = `
-                        <a href="/api/download/${project.id}?version=pc" class="download-btn pc">
+                        <button class="download-btn pc" onclick="startDownload('${project.id}', 'pc', '${escapeHtml(project.original_name)}', ${project.file_size || 0})">
                             <i class="fas fa-windows"></i> Скачать для ПК
-                            <span class="btn-size">${formatFileSize(project.file_size)}</span>
-                        </a>
-                        <a href="/api/download/${project.id}?version=mobile" class="download-btn mobile">
+                            <span class="btn-size">${formatSize(project.file_size)}</span>
+                        </button>
+                        <button class="download-btn mobile" onclick="startDownload('${project.id}', 'mobile', '${escapeHtml(project.original_name)}', ${project.mobile_file_size || 0})">
                             <i class="fas fa-android"></i> Скачать для телефона
-                            <span class="btn-size">${formatFileSize(project.mobile_file_size)}</span>
-                        </a>`;
+                            <span class="btn-size">${formatSize(project.mobile_file_size)}</span>
+                        </button>`;
                 } else {
                     downloadHtml = `
-                        <a href="/api/download/${project.id}" class="download-btn pc">
+                        <button class="download-btn pc" onclick="startDownload('${project.id}', '', '${escapeHtml(project.original_name)}', ${project.file_size || 0})">
                             <i class="fas fa-download"></i> Скачать
-                            <span class="btn-size">${formatFileSize(project.file_size)}</span>
-                        </a>`;
+                            <span class="btn-size">${formatSize(project.file_size)}</span>
+                        </button>`;
                 }
             } else {
-                downloadHtml = `
-                    <a href="/api/download/${project.id}" class="download-btn link" target="_blank">
-                        <i class="fas fa-external-link-alt"></i> Перейти по ссылке
-                    </a>`;
+                downloadHtml = `<a href="/api/download/${project.id}" class="download-btn link" target="_blank"><i class="fas fa-external-link-alt"></i> Перейти по ссылке</a>`;
             }
 
             document.getElementById('content').innerHTML = `
@@ -355,37 +616,19 @@
                         <h1 class="project-title">${escapeHtml(project.name)}</h1>
                         <p class="project-description">${escapeHtml(project.description || 'Без описания')}</p>
                         <div class="project-meta">
-                            <div class="meta-item">
-                                <span class="meta-label">Добавлен</span>
-                                <span class="meta-value">${addedDate}</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Обновлён</span>
-                                <span class="meta-value">${updatedDate}</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Скачиваний</span>
-                                <span class="meta-value"><i class="fas fa-download"></i> ${project.downloads || 0}</span>
-                            </div>
-                            ${isFile && project.file_size ? `
-                            <div class="meta-item">
-                                <span class="meta-label">Размер</span>
-                                <span class="meta-value">${formatFileSize(project.file_size)}</span>
-                            </div>` : ''}
-                            ${isFile && project.original_name ? `
-                            <div class="meta-item">
-                                <span class="meta-label">Тип файла</span>
-                                <span class="meta-value">${project.original_name.split('.').pop().toUpperCase()}</span>
-                            </div>` : ''}
+                            <div class="meta-item"><span class="meta-label">Добавлен</span><span class="meta-value">${addedDate}</span></div>
+                            <div class="meta-item"><span class="meta-label">Обновлён</span><span class="meta-value">${updatedDate}</span></div>
+                            <div class="meta-item"><span class="meta-label">Скачиваний</span><span class="meta-value"><i class="fas fa-download"></i> ${project.downloads || 0}</span></div>
+                            ${isFile && project.file_size ? `<div class="meta-item"><span class="meta-label">Размер</span><span class="meta-value">${formatSize(project.file_size)}</span></div>` : ''}
+                            ${isFile && project.original_name ? `<div class="meta-item"><span class="meta-label">Тип файла</span><span class="meta-value">${project.original_name.split('.').pop().toUpperCase()}</span></div>` : ''}
                         </div>
-                        <div class="download-section">
-                            ${downloadHtml}
-                        </div>
+                        <div class="download-section">${downloadHtml}</div>
                     </div>
                 </div>`;
         }
 
         init();
+        updateBadge();
     </script>
 </body>
 </html>
