@@ -685,14 +685,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                 }
 
                 // Если гость - кнопка заблокирована
-                const downloadBtn = isGuest ? 
-                    `<button class="download-btn" disabled>
-                        <i class="fas fa-lock"></i> Войдите для скачивания
-                    </button>` :
-                    `<a href="/api/download/${project.id}" class="download-btn" ${!isFile ? 'target="_blank"' : ''}>
-                        <i class="fas ${isFile ? 'fa-download' : 'fa-external-link-alt'}"></i>
-                        ${isFile ? 'Скачать' : 'Перейти'}
-                    </a>`;
+                const downloadBtn = '';
 
                 return `
     <div class="project-card" onclick="window.location.href='/project.html?id=${project.id}'" style="cursor:pointer;">
@@ -703,10 +696,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                             <h3>${escapeHtml(project.name)}</h3>
                             <p>${escapeHtml(project.description || 'Без описания')}</p>
                             <div class="file-meta">
+
                                 <span>${size}</span>
                                 <span><i class="fas fa-download"></i> ${downloads}</span>
-                            </div>
-                            ${downloadBtn}
+                            </div> 
                         </div>
                     </div>
                 `;
